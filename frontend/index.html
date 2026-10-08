@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>TransitPlus — Admin & Fleet Operations (Member 4)</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #070a12;
+      --surface-shell: #0b0f19;
+      --surface-card: rgba(17, 24, 39, 0.75);
+      --surface-card-hover: rgba(30, 41, 59, 0.8);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(14, 165, 233, 0.3);
+      --primary-cyan: #0ea5e9;
+      --primary-cyan-bright: #38bdf8;
+      --primary-glow: rgba(14, 165, 233, 0.25);
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --accent-purple: #a855f7;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      margin: 0; padding: 0; background-color: var(--bg-dark);
+      font-family: 'Outfit', sans-serif; color: var(--text-main);
+      display: flex; justify-content: center; align-items: center; min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ultra-realistic Mobile Phone Device Frame */
+    .mobile-device-shell {
+      width: 100%; max-width: 440px; height: 100vh; max-height: 920px;
+      background: var(--surface-shell); border-radius: 40px;
+      box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.9), 0 0 0 12px #1e293b, 0 0 0 14px #0f172a, 0 0 40px rgba(14, 165, 233, 0.15);
+      display: flex; flex-direction: column; position: relative; overflow: hidden;
+    }
+
+    @media (max-width: 480px) {
+      .mobile-device-shell { max-width: 100%; height: 100vh; max-height: 100vh; border-radius: 0; box-shadow: none; }
+    }
+
+    /* Device Notch Header */
+    .mobile-notch-header {
+      height: 44px; background: rgba(11, 15, 25, 0.95); backdrop-filter: blur(16px);
+      display: flex; justify-content: space-between; align-items: center; padding: 0 22px;
+      font-size: 13px; font-weight: 700; color: #e2e8f0; z-index: 1000; border-bottom: 1px solid var(--border-glass);
+    }
+    .dynamic-island {
+      width: 96px; height: 22px; background: #000; border-radius: 12px;
+      display: flex; justify-content: center; align-items: center; gap: 6px;
+    }
+    .island-dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: pulseGlow 2s infinite; }
+    @keyframes pulseGlow { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+
+    /* Top App Navigation Header */
+    .app-top-header {
+      padding: 12px 18px; background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-glass); display: flex; justify-content: space-between; align-items: center; z-index: 900;
+    }
+
+    .brand-badge {
+      display: flex; alignItems: center; gap: 10px;
+    }
+    .brand-icon {
+      width: 38px; height: 38px; border-radius: 12px;
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      display: flex; justify-content: center; align-items: center; color: #fff;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    /* Screen Scrollable Viewport */
+    .screen-viewport {
+      flex: 1; overflow-y: auto; padding: 16px; padding-bottom: 90px; scrollbar-width: none;
+    }
+    .screen-viewport::-webkit-scrollbar { display: none; }
+
+    /* Glassmorphism Cards */
+    .glass-card {
+      background: var(--surface-card); backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass); border-radius: 20px; padding: 16px; margin-bottom: 14px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative; overflow: hidden;
+    }
+    .glass-card:hover {
+      border-color: var(--border-glow); transform: translateY(-2px);
+      box-shadow: 0 15px 30px -5px rgba(14, 165, 233, 0.15);
+    }
+
+    /* Metrics 2x2 Grid */
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    .metric-card {
+      background: linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.85) 100%);
+      border: 1px solid var(--border-glass); border-radius: 18px; padding: 14px;
+      display: flex; flex-direction: column; position: relative; overflow: hidden;
+    }
+    .metric-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary-cyan); }
+    .metric-card.emerald::before { background: var(--accent-emerald); }
+    .metric-card.amber::before { background: var(--accent-amber); }
+    .metric-card.rose::before { background: var(--accent-rose); }
+
+    .metric-val { font-size: 26px; font-weight: 800; color: #ffffff; margin: 4px 0 2px 0; letter-spacing: -0.5px; }
+    .metric-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Map Box Container */
+    #leafletMap {
+      height: 360px; width: 100%; border-radius: 20px; overflow: hidden;
+      border: 1px solid var(--border-glass); margin-bottom: 14px; z-index: 10;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+    }
+
+    /* Leaflet Marker Styling */
+    .custom-map-marker {
+      background: rgba(15, 23, 42, 0.95); border: 2px solid var(--primary-cyan);
+      border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: #fff;
+      display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 16px rgba(14, 165, 233, 0.5);
+      white-space: nowrap; font-family: var(--font-mono);
+    }
+    .custom-map-marker.delayed { border-color: var(--accent-amber); box-shadow: 0 4px 16px rgba(245, 158, 11, 0.5); }
+    .custom-map-marker.selected { background: #0284c7; border-color: #38bdf8; transform: scale(1.1); }
+
+    /* Telemetry Bottom Sheet */
+    .telemetry-bottom-sheet {
+      background: rgba(15, 23, 42, 0.96); backdrop-filter: blur(24px);
+      border-top: 1px solid var(--border-glow); border-radius: 24px 24px 0 0;
+      padding: 18px; margin-top: -10px; box-shadow: 0 -15px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Form Controls */
+    .form-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block; }
+    .form-input {
+      width: 100%; background: rgba(30, 41, 59, 0.7); border: 1px solid var(--border-glass);
+      border-radius: 14px; padding: 12px 14px; color: #fff; font-family: inherit; font-size: 14px;
+      margin-bottom: 14px; outline: none; transition: all 0.2s ease;
+    }
+    .form-input:focus { border-color: var(--primary-cyan); box-shadow: 0 0 0 3px var(--primary-glow); }
+
+    .btn-primary {
+      width: 100%; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      color: #ffffff; border: none; border-radius: 14px; padding: 14px; font-size: 15px; font-weight: 700;
+      cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4); transition: all 0.2s ease;
+    }
+    .btn-primary:hover { opacity: 0.95; transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+
+    /* Bottom Navigation Bar */
+    .bottom-nav-bar {
+      position: absolute; bottom: 0; left: 0; width: 100%; height: 76px;
+      background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(24px);
+      border-top: 1px solid var(--border-glass); display: flex; justify-content: space-around; align-items: center; z-index: 1000;
+    }
+    .nav-item {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      color: var(--text-muted); font-size: 11px; font-weight: 600; cursor: pointer; background: none; border: none;
+      transition: color 0.2s ease;
+    }
+    .nav-item.active { color: var(--primary-cyan-bright); }
+
+    /* Filter Chips */
+    .chip-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 14px; scrollbar-width: none; }
+    .chip {
+      background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border-glass); border-radius: 20px;
+      padding: 6px 14px; font-size: 12px; font-weight: 600; color: var(--text-muted); white-space: nowrap; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .chip.active { background: var(--primary-cyan); color: #fff; border-color: var(--primary-cyan); }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 2000;
+      display: flex; justify-content: center; align-items: center; padding: 20px;
+    }
+    .modal-content {
+      background: #0f172a; border: 1px solid var(--border-glow); border-radius: 28px;
+      padding: 22px; width: 100%; max-width: 380px; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7);
+      animation: modalSlide 0.25s ease-out;
+    }
+    @keyframes modalSlide { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    .tag-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700;
+      font-family: var(--font-mono); text-transform: uppercase;
+    }
+    .tag-valid { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .tag-flagged { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .tag-invalid { background: rgba(244, 63, 94, 0.15); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.3); }
+  </style>
+</head>
+<body>
+
+<div class="mobile-device-shell">
+  <!-- Device Notch -->
+  <div class="mobile-notch-header">
+    <span id="liveTimeClock">09:41</span>
+    <div class="dynamic-island">
+      <div class="island-dot"></div>
+      <span style="font-size: 10px; color: #94a3b8; font-weight: 500;">GPS Active</span>
+    </div>
+    <span>5G 100%</span>
+  </div>
+
+  <!-- Top App Navigation Header -->
+  <div class="app-top-header">
+    <div class="brand-badge">
+      <div class="brand-icon">
+        <i data-lucide="shield-check" style="width: 22px; height: 22px;"></i>
+      </div>
+      <div>
+        <div style="font-size: 16px; font-weight: 800; color: #fff; letter-spacing: -0.3px;">
+          Transit<span style="color: var(--primary-cyan-bright);">Plus</span> Ops
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); font-weight: 500;">
+          Admin & Fleet Control (Member 4)
+        </div>
+      </div>
+    </div>
+    <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 20px; padding: 4px 10px; font-size: 11px; color: #10b981; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+      <i data-lucide="activity" style="width: 14px; height: 14px;"></i> API Online
+    </div>
+  </div>
+
+  <!-- Screen Content Viewport -->
+  <div class="screen-viewport" id="screenViewport">
+    <!-- Dynamic Component Views Rendered via JS -->
+  </div>
+
+  <!-- Bottom Navigation Bar -->
+  <div class="bottom-nav-bar">
+    <button class="nav-item active" onclick="switchTab('overview')" id="nav-overview">
+      <i data-lucide="layout-dashboard" style="width: 20px; height: 20px;"></i>
+      <span>Overview</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('radar')" id="nav-radar">
+      <i data-lucide="radio" style="width: 20px; height: 20px;"></i>
+      <span>Fleet Radar</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('audit')" id="nav-audit">
+      <i data-lucide="clipboard-list" style="width: 20px; height: 20px;"></i>
+      <span>Ticket Audit</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('disruption')" id="nav-disruption">
+      <i data-lucide="alert-triangle" style="width: 20px; height: 20px;"></i>
+      <span>Disruptions</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('profile')" id="nav-profile">
+      <i data-lucide="user-check" style="width: 20px; height: 20px;"></i>
+      <span>Profile</span>
+    </button>
+  </div>
+</div>
+
+<!-- Modal Container -->
+<div id="modalContainer"></div>
+
+<script>
+  // App State & Data
+  let currentTab = 'overview';
+  let leafletMapInstance = null;
+  let activeChartInstance = null;
+  let selectedVehicleId = 'TN-0824';
+  let auditFilter = 'all';
+
+  const vehiclesData = [
+    { id: 'TN-0821', route: 'Route 42', routeName: 'Line 42 Eastbound (Central to Malabe)', driver: 'Saran Diya', driverId: 'DRV-401', speed: 42, occupancy: 36, maxSeats: 50, lat: 6.9271, lng: 79.8612, status: 'Active', battery: '92%' },
+    { id: 'TN-0824', route: 'Route 42', routeName: 'Line 42 Eastbound (Market St to Malabe)', driver: 'Kavithushan B.', driverId: 'DRV-102', speed: 18, occupancy: 48, maxSeats: 50, lat: 6.9147, lng: 79.8732, status: 'Delayed', battery: '82%' },
+    { id: 'TN-0830', route: 'Route 18', routeName: 'Route 18 Express Rail Line', driver: 'Anura Bandara', driverId: 'DRV-809', speed: 65, occupancy: 120, maxSeats: 200, lat: 6.9344, lng: 79.8500, status: 'Active', battery: '100%' },
+    { id: 'TN-0842', route: 'Route 105', routeName: 'Route 105 BRT Bus Corridor', driver: 'Nimal Perera', driverId: 'DRV-304', speed: 0, occupancy: 0, maxSeats: 50, lat: 6.9011, lng: 79.8655, status: 'Maintenance', battery: '45%' },
+    { id: 'TN-0855', route: 'Route 42', routeName: 'Line 42 Westbound', driver: 'Kamal Silva', driverId: 'DRV-220', speed: 38, occupancy: 24, maxSeats: 50, lat: 6.9200, lng: 79.8800, status: 'Active', battery: '88%' }
+  ];
+
+  const ticketsData = [
+    { id: '#TK-9824-B01', pass: 'Single Journey Pass', route: 'Route 42', fare: 65.00, passenger: 'Elena Rosiera', conductor: 'CND-77492', time: '10:42 AM', status: 'valid', reason: '' },
+    { id: '#TK-9827-C18', pass: 'Metro Rapid Monthly Pass', route: 'Route 18', fare: 680.00, passenger: 'Kasun Wickrama', conductor: 'CND-88201', time: '10:38 AM', status: 'valid', reason: '' },
+    { id: '#TK-9830-D42', pass: 'Single Journey Pass', route: 'Route 42', fare: 65.00, passenger: 'Unknown Commuter', conductor: 'CND-77492', time: '10:25 AM', status: 'flagged', reason: 'Outdoor QR Glare / Low Contrast Scan Retry (UI-01)' },
+    { id: '#TK-9833-A05', pass: 'Day Pass (All Routes)', route: 'Route 105', fare: 250.00, passenger: 'Dinuka Fernando', conductor: 'CND-30112', time: '10:15 AM', status: 'invalid', reason: 'Expired Pass Timestamp (12 mins prior)' },
+    { id: '#TK-9838-B12', pass: 'Single Journey Pass', route: 'Route 42', fare: 65.00, passenger: 'Unknown Commuter', conductor: 'CND-77492', time: '09:55 AM', status: 'flagged', reason: 'Duplicate Scan Verification Attempt' },
+    { id: '#TK-9842-C09', pass: 'Student Transit Pass', route: 'Route 18', fare: 40.00, passenger: 'Saman Kumara', conductor: 'CND-88201', time: '09:40 AM', status: 'valid', reason: '' }
+  ];
+
+  const activeAlerts = [
+    { id: 'ALT-1092', incident: 'Major Track Maintenance & Water Main Burst', route: 'Route 42 Eastbound (Central to University)', delay: 15, severity: 'High', time: '10:15 AM', author: 'Admin (IT23762572)' }
+  ];
+
+  // Clock Update
+  setInterval(() => {
+    const now = new Date();
+    document.getElementById('liveTimeClock').innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }, 1000);
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById(`nav-${tab}`).classList.add('active');
+    renderScreen();
+  }
+
+  function renderScreen() {
+    const viewport = document.getElementById('screenViewport');
+
+    if (currentTab === 'overview') {
+      viewport.innerHTML = `
+        <div style="margin-bottom: 14px;">
+          <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Operations Control Center</div>
+          <h2 style="margin: 2px 0 0 0; font-size: 22px; color: #fff; font-weight: 800;">Fleet Status Overview</h2>
+        </div>
+
+        <!-- 2x2 Grid Metrics Cards -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-label">Active Fleet</span>
+            <div class="metric-val">142</div>
+            <div style="font-size: 11px; color: #10b981; font-weight: 600;">↑ 94.2% On-Time</div>
+          </div>
+          <div class="metric-card emerald">
+            <span class="metric-label">Active Routes</span>
+            <div class="metric-val">24</div>
+            <div style="font-size: 11px; color: #94a3b8;">Bus & Rail Lines</div>
+          </div>
+          <div class="metric-card amber">
+            <span class="metric-label">Passes Issued</span>
+            <div class="metric-val">18.4K</div>
+            <div style="font-size: 11px; color: #f59e0b; font-weight: 600;">Rs 520,400 Today</div>
+          </div>
+          <div class="metric-card rose" onclick="switchTab('audit')" style="cursor: pointer;">
+            <span class="metric-label">Flagged Anomalies</span>
+            <div class="metric-val" style="color: #f43f5e;">23</div>
+            <div style="font-size: 11px; color: #f43f5e; font-weight: 600;">Tap to Audit Hub →</div>
+          </div>
+        </div>
+
+        <!-- Real-Time Hourly Ticket Sales Chart (Chart.js) -->
+        <div class="glass-card">
+          <div style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <span>Hourly Ticket Issuance Volume</span>
+            <span style="font-size: 10px; color: var(--primary-cyan-bright); font-family: var(--font-mono);">LIVE STREAM</span>
+          </div>
+          <canvas id="overviewChart" height="150"></canvas>
+        </div>
+
+        <!-- Quick Access Feature Cards -->
+        <div class="glass-card" onclick="switchTab('radar')" style="cursor: pointer; display: flex; align-items: center; gap: 14px;">
+          <div style="width: 44px; height: 44px; border-radius: 14px; background: rgba(14, 165, 233, 0.15); border: 1px solid var(--border-glow); display: flex; justify-content: center; align-items: center; color: var(--primary-cyan-bright);">
+            <i data-lucide="radio" style="width: 22px; height: 22px;"></i>
+          </div>
+          <div style="flex: 1;">
+            <div style="font-size: 14px; font-weight: 700; color: #fff;">Live Fleet Telemetry Radar (US08)</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Real-time map tracking with pull-up telemetry card</div>
+          </div>
+          <i data-lucide="chevron-right" style="color: var(--text-muted); width: 20px;"></i>
+        </div>
+
+        <div class="glass-card" onclick="switchTab('disruption')" style="cursor: pointer; display: flex; align-items: center; gap: 14px;">
+          <div style="width: 44px; height: 44px; border-radius: 14px; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.3); display: flex; justify-content: center; align-items: center; color: #f43f5e;">
+            <i data-lucide="alert-triangle" style="width: 22px; height: 22px;"></i>
+          </div>
+          <div style="flex: 1;">
+            <div style="font-size: 14px; font-weight: 700; color: #fff;">Disruption Alert Composer (FR6-FR8)</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Broadcast emergency alerts with confirmation modal</div>
+          </div>
+          <i data-lucide="chevron-right" style="color: var(--text-muted); width: 20px;"></i>
+        </div>
+      `;
+
+      setTimeout(() => initOverviewChart(), 50);
+    } else if (currentTab === 'radar') {
+      viewport.innerHTML = `
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">US08 — Fleet Monitoring</div>
+            <h2 style="margin: 2px 0 0 0; font-size: 20px; color: #fff; font-weight: 800;">Live Fleet Radar</h2>
+          </div>
+          <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 14px; padding: 4px 10px; font-size: 11px; color: #10b981; font-weight: 700;">
+            5 GPS Nodes Active
+          </div>
+        </div>
+
+        <!-- Real Leaflet CartoDB Dark Matter Map -->
+        <div id="leafletMap"></div>
+
+        <!-- Pull-Up Telemetry Bottom Sheet for Selected Vehicle -->
+        <div id="telemetrySheet" class="telemetry-bottom-sheet"></div>
+      `;
+
+      setTimeout(() => initLeafletMap(), 50);
+    } else if (currentTab === 'audit') {
+      viewport.innerHTML = `
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">US09 — Financial Ticket Audit</div>
+          <h2 style="margin: 2px 0 0 0; font-size: 20px; color: #fff; font-weight: 800;">Ticket Audit Hub</h2>
+        </div>
+
+        <!-- Quick Filter Chips -->
+        <div class="chip-row">
+          <button class="chip ${auditFilter === 'all' ? 'active' : ''}" onclick="filterAudit('all')">All Scans (1,220)</button>
+          <button class="chip ${auditFilter === 'flagged' ? 'active' : ''}" onclick="filterAudit('flagged')">⚠️ Flagged (23)</button>
+          <button class="chip ${auditFilter === 'invalid' ? 'active' : ''}" onclick="filterAudit('invalid')">❌ Invalid (8)</button>
+          <button class="chip ${auditFilter === 'valid' ? 'active' : ''}" onclick="filterAudit('valid')">✓ Valid (1,189)</button>
+        </div>
+
+        <!-- Ticket Transaction List -->
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${ticketsData.filter(t => auditFilter === 'all' || t.status === auditFilter).map(t => `
+            <div class="glass-card" style="padding: 14px; margin-bottom: 0; cursor: pointer; border-left: 4px solid ${t.status === 'flagged' ? '#f59e0b' : t.status === 'invalid' ? '#f43f5e' : '#10b981'};" onclick="openTicketDetailModal('${t.id}')">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 14px; font-weight: 700; color: #fff; font-family: var(--font-mono);">${t.id}</span>
+                <span class="tag-badge ${t.status === 'flagged' ? 'tag-flagged' : t.status === 'invalid' ? 'tag-invalid' : 'tag-valid'}">${t.status}</span>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between;">
+                <span>${t.pass} • ${t.route}</span>
+                <span style="color: #fff; font-weight: 700;">Rs ${t.fare.toFixed(2)}</span>
+              </div>
+              ${t.reason ? `<div style="font-size: 11px; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 6px 10px; border-radius: 8px; margin-top: 8px;">⚠️ Anomaly: ${t.reason}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } else if (currentTab === 'disruption') {
+      viewport.innerHTML = `
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">FR6, FR7, FR8 — Emergency Operations</div>
+          <h2 style="margin: 2px 0 0 0; font-size: 20px; color: #fff; font-weight: 800;">Disruption Alert Composer</h2>
+        </div>
+
+        <form onsubmit="handleDisruptionSubmit(event)" class="glass-card" style="padding: 18px;">
+          <div style="font-size: 13px; font-weight: 700; color: #f43f5e; margin-bottom: 14px; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="shield-alert" style="width: 18px;"></i> Emergency Push Notification Composer
+          </div>
+
+          <label class="form-label">Incident Reason / Title</label>
+          <input type="text" class="form-input" id="incTitle" value="Major Track Maintenance & Water Main Burst" required />
+
+          <label class="form-label">Affected Route</label>
+          <select class="form-input" id="incRoute">
+            <option value="Route 42 Eastbound (Central to Malabe)">Route 42 Eastbound (Central to Malabe)</option>
+            <option value="Route 18 Express Rail Line">Route 18 Express Rail Line</option>
+            <option value="Route 105 BRT Bus Corridor">Route 105 BRT Bus Corridor</option>
+          </select>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label class="form-label">Severity Level</label>
+              <select class="form-input" id="incSeverity">
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High" selected>High</option>
+                <option value="Critical">Critical</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Delay Duration (+mins)</label>
+              <input type="number" class="form-input" id="incDelay" value="15" min="1" max="180" />
+            </div>
+          </div>
+
+          <label class="form-label">Alternative Reroute Advice</label>
+          <textarea class="form-input" id="incReroute" style="height: 60px; resize: none;">Reroute via Station Road Bypass. Expect 15-min delay.</textarea>
+
+          <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #e11d48 0%, #be123c 100%); boxShadow: 0 6px 20px rgba(225, 29, 72, 0.4);">
+            <i data-lucide="send" style="width: 18px;"></i> Broadcast System Alert
+          </button>
+        </form>
+
+        <div style="margin-top: 16px;">
+          <div style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 10px;">Active Disruption Broadcasts (${activeAlerts.length})</div>
+          ${activeAlerts.map(a => `
+            <div class="glass-card" style="padding: 14px; margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 13px; font-weight: 700; color: #f43f5e; font-family: var(--font-mono);">${a.id} • ${a.incident}</span>
+                <span style="font-size: 10px; color: var(--text-muted);">${a.time}</span>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted);">Route: ${a.route} (+${a.delay} mins delay)</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } else if (currentTab === 'profile') {
+      viewport.innerHTML = `
+        <div style="margin-bottom: 14px;">
+          <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Member 4 Staff Profile</div>
+          <h2 style="margin: 2px 0 0 0; font-size: 20px; color: #fff; font-weight: 800;">Coordinator Profile</h2>
+        </div>
+
+        <div class="glass-card" style="padding: 24px; text-align: center;">
+          <div style="width: 76px; height: 76px; border-radius: 50%; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); margin: 0 auto 12px auto; display: flex; justify-content: center; align-items: center; font-size: 26px; font-weight: 800; color: #fff; boxShadow: 0 8px 24px rgba(2, 132, 199, 0.4);">
+            KJ
+          </div>
+          <h3 style="margin: 0; font-size: 20px; color: #fff; font-weight: 800;">K. K. Jagoda</h3>
+          <div style="font-size: 13px; color: var(--primary-cyan-bright); font-weight: 600; margin-top: 4px; font-family: var(--font-mono);">
+            Student ID: IT23762572 • Group WE_121
+          </div>
+          <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 20px; padding: 4px 14px; font-size: 11px; color: #10b981; font-weight: 700; margin-top: 10px;">
+            Transport Operations Coordinator (Tier 3 Clearance)
+          </div>
+        </div>
+
+        <div class="glass-card" style="padding: 8px 16px;">
+          <div style="padding: 14px 0; border-bottom: 1px solid var(--border-glass); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 13px; color: #fff;">Clearance Level</span>
+            <span style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">Tier 3 Master Passcode</span>
+          </div>
+          <div style="padding: 14px 0; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="downloadAuditLogs()">
+            <span style="font-size: 13px; color: #fff;">Export System Audit Logs</span>
+            <span style="font-size: 12px; color: #10b981; font-weight: 700;">Download JSON ↓</span>
+          </div>
+        </div>
+      `;
+    }
+
+    lucide.createIcons();
+  }
+
+  // Chart Initialization
+  function initOverviewChart() {
+    const ctx = document.getElementById('overviewChart');
+    if (!ctx) return;
+    if (activeChartInstance) activeChartInstance.destroy();
+
+    activeChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00'],
+        datasets: [{
+          label: 'Passes Issued',
+          data: [1200, 3400, 5800, 4200, 2100, 1700, 2400],
+          borderColor: '#0ea5e9',
+          backgroundColor: 'rgba(14, 165, 233, 0.15)',
+          fill: true,
+          tension: 0.4,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  // Leaflet Map Initialization
+  function initLeafletMap() {
+    const mapEl = document.getElementById('leafletMap');
+    if (!mapEl) return;
+
+    if (leafletMapInstance) {
+      leafletMapInstance.remove();
+      leafletMapInstance = null;
+    }
+
+    leafletMapInstance = L.map('leafletMap', { zoomControl: false }).setView([6.9200, 79.8650], 13);
+
+    // CartoDB Dark Matter Tiles
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19
+    }).addTo(leafletMapInstance);
+
+    // Add Vehicle Markers
+    vehiclesData.forEach(v => {
+      const markerHtml = `
+        <div class="custom-map-marker ${v.status === 'Delayed' ? 'delayed' : ''} ${v.id === selectedVehicleId ? 'selected' : ''}">
+          <i data-lucide="bus" style="width: 12px;"></i>
+          <span>${v.id}</span>
+        </div>
+      `;
+      const customIcon = L.divIcon({ className: '', html: markerHtml, iconSize: [80, 26] });
+
+      const marker = L.marker([v.lat, v.lng], { icon: customIcon }).addTo(leafletMapInstance);
+      marker.on('click', () => {
+        selectedVehicleId = v.id;
+        renderTelemetrySheet(v);
+      });
+    });
+
+    const selected = vehiclesData.find(v => v.id === selectedVehicleId) || vehiclesData[1];
+    renderTelemetrySheet(selected);
+    lucide.createIcons();
+  }
+
+  function renderTelemetrySheet(v) {
+    const sheet = document.getElementById('telemetrySheet');
+    if (!sheet) return;
+
+    sheet.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-size: 18px; font-weight: 800; color: #fff; font-family: var(--font-mono);">#${v.id}</span>
+        <span class="tag-badge ${v.status === 'Delayed' ? 'tag-flagged' : 'tag-valid'}">${v.status}</span>
+      </div>
+      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">${v.routeName}</div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+        <div style="background: rgba(30,41,59,0.7); border-radius: 12px; padding: 10px; text-align: center;">
+          <div style="font-size: 15px; font-weight: 800; color: #fff;">${v.speed} km/h</div>
+          <div style="font-size: 10px; color: var(--text-muted);">Speed</div>
+        </div>
+        <div style="background: rgba(30,41,59,0.7); border-radius: 12px; padding: 10px; text-align: center;">
+          <div style="font-size: 15px; font-weight: 800; color: #fff;">${v.occupancy}/${v.maxSeats}</div>
+          <div style="font-size: 10px; color: var(--text-muted);">Occupancy</div>
+        </div>
+        <div style="background: rgba(30,41,59,0.7); border-radius: 12px; padding: 10px; text-align: center;">
+          <div style="font-size: 15px; font-weight: 800; color: #fff;">${v.battery}</div>
+          <div style="font-size: 10px; color: var(--text-muted);">EV Fuel</div>
+        </div>
+      </div>
+
+      <div style="font-size: 12px; color: #fff; background: rgba(30,41,59,0.5); padding: 8px 12px; border-radius: 10px; display: flex; justify-content: space-between;">
+        <span>Assigned Driver: <strong>${v.driver} (${v.driverId})</strong></span>
+        <span style="color: #10b981; font-weight: 700;">Live GPS</span>
+      </div>
+    `;
+  }
+
+  function filterAudit(status) {
+    auditFilter = status;
+    renderScreen();
+  }
+
+  function openTicketDetailModal(id) {
+    const t = ticketsData.find(item => item.id === id) || ticketsData[2];
+    const modal = document.getElementById('modalContainer');
+    modal.innerHTML = `
+      <div class="modal-overlay" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+          <div style="font-size: 16px; font-weight: 800; color: #fff; margin-bottom: 12px;">Ticket Audit Proof</div>
+          <div style="background: rgba(30,41,59,0.7); padding: 14px; border-radius: 14px; font-size: 13px; color: #fff; margin-bottom: 14px;">
+            <div><strong>Ticket ID:</strong> ${t.id}</div>
+            <div><strong>Passenger:</strong> ${t.passenger}</div>
+            <div><strong>Fare:</strong> Rs ${t.fare.toFixed(2)}</div>
+            <div><strong>Conductor ID:</strong> ${t.conductor}</div>
+            ${t.reason ? `<div style="color: #f59e0b; margin-top: 6px;">⚠️ ${t.reason}</div>` : ''}
+          </div>
+          <button class="btn-primary" onclick="closeModal()">Close Window</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function closeModal() {
+    document.getElementById('modalContainer').innerHTML = '';
+  }
+
+  function handleDisruptionSubmit(e) {
+    e.preventDefault();
+    const title = document.getElementById('incTitle').value;
+    const route = document.getElementById('incRoute').value;
+    const delay = document.getElementById('incDelay').value;
+
+    const modal = document.getElementById('modalContainer');
+    modal.innerHTML = `
+      <div class="modal-overlay">
+        <div class="modal-content">
+          <div style="text-align: center; margin-bottom: 14px;">
+            <i data-lucide="shield-alert" style="width: 44px; height: 44px; color: #f43f5e; margin: 0 auto 8px auto;"></i>
+            <h3 style="margin: 0; font-size: 18px; color: #fff;">Confirm System Push Broadcast?</h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+              HCI Error Prevention Safeguard (H5): Re-verify parameters before sending push dispatch to commuters.
+            </p>
+          </div>
+
+          <div style="background: rgba(30,41,59,0.7); border-radius: 12px; padding: 12px; font-size: 12px; color: #fff; margin-bottom: 16px;">
+            <div><strong>Incident:</strong> ${title}</div>
+            <div><strong>Affected Route:</strong> ${route}</div>
+            <div><strong>Delay:</strong> +${delay} minutes</div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button onclick="closeModal()" style="background: rgba(51,65,85,0.8); color: #fff; border: none; border-radius: 12px; padding: 12px; font-weight: 700; cursor: pointer;">Cancel</button>
+            <button onclick="confirmBroadcast('${title}', '${route}', ${delay})" style="background: #f43f5e; color: #fff; border: none; border-radius: 12px; padding: 12px; font-weight: 700; cursor: pointer;">Yes, Broadcast</button>
+          </div>
+        </div>
+      </div>
+    `;
+    lucide.createIcons();
+  }
+
+  function confirmBroadcast(title, route, delay) {
+    activeAlerts.unshift({
+      id: 'ALT-' + Math.floor(1000 + Math.random()*9000),
+      incident: title,
+      route: route,
+      delay: delay,
+      time: 'Just Now',
+      author: 'Admin (IT23762572)'
+    });
+    closeModal();
+    switchTab('disruption');
+  }
+
+  function downloadAuditLogs() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(ticketsData, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", "TransitPlus_Member4_AuditLogs.json");
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+  }
+
+  // Initial App Render
+  renderScreen();
+</script>
+</body>
+</html>
