@@ -8,7 +8,11 @@
     "scheme": "transitpulse",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "TransitPulse uses your location to discover nearby bus and train services.",
+        "NSCameraUsageDescription": "TransitPulse requires camera access to scan and validate passenger QR transit tickets in real time."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,6 +21,11 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -32,7 +41,20 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow TransitPulse to use your location for real-time live vehicle tracking and nearby transit services."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow TransitPulse to access your camera to scan passenger QR tickets."
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
