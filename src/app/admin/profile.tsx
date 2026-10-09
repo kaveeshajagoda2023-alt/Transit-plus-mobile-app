@@ -14,7 +14,7 @@ export default function AdminProfileScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerSubtitle}>Member 4 Staff Profile</Text>
+        <Text style={styles.headerSubtitle}>System Administrator</Text>
         <Text style={styles.headerTitle}>Coordinator Profile</Text>
       </View>
 
@@ -25,7 +25,7 @@ export default function AdminProfileScreen() {
         </View>
 
         <Text style={styles.name}>K. K. Jagoda</Text>
-        <Text style={styles.studentId}>Student ID: IT23762572 • Group WE_121</Text>
+        <Text style={styles.studentId}>Official Staff Account • TransitPulse</Text>
 
         <View style={styles.roleBadge}>
           <Award size={14} color="#10b981" />
