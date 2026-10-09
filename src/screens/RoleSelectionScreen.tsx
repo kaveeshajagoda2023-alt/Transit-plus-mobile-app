@@ -34,7 +34,7 @@ export function RoleSelectionScreen() {
     } else if (role === 'DRIVER') {
       router.push('/staff/login' as any);
     } else if (role === 'ADMIN') {
-      router.push('/staff/login' as any);
+      router.push('/admin/login' as any);
     }
   };
 
