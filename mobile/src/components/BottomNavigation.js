@@ -1,50 +1,52 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
+import Icon from './Icon';
 
-const BottomNavigation = ({ state, descriptors, navigation }) => {
-  const tabs = [
-    { name: 'CheckoutTab', label: 'Home', icon: '🏠' },
-    { name: 'Routes', label: 'Routes', icon: '🗺️' },
-    { name: 'Tickets', label: 'Tickets', icon: '🎫' },
-    { name: 'Alerts', label: 'Alerts', icon: '🔔' },
-    { name: 'Profile', label: 'Profile', icon: '👤' },
-  ];
+// Labels/icons for the tab routes declared in AppNavigator
+const TAB_META = {
+  Home: { label: 'Home', icon: 'home' },
+  BuyTicket: { label: 'Buy Ticket', icon: 'plus-circle' },
+  Tickets: { label: 'My Tickets', icon: 'ticket' },
+  Scan: { label: 'Scan', icon: 'scan' },
+  Profile: { label: 'Profile', icon: 'user' },
+};
+
+const BottomNavigation = ({ state, navigation }) => {
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.container}>
-      {tabs.map((tab, index) => {
-        const isFocused = state ? state.index === index : index === 0;
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 5) }]} accessibilityRole="tablist">
+      {state.routes.map((route, index) => {
+        const meta = TAB_META[route.name] || { label: route.name, icon: 'info' };
+        const isFocused = state.index === index;
 
         const onPress = () => {
-          if (navigation) {
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: tab.name,
-              canPreventDefault: true,
-            });
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
 
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(tab.name);
-            }
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
           }
         };
 
         return (
           <TouchableOpacity
-            key={tab.name}
+            key={route.key}
             onPress={onPress}
             style={styles.tabButton}
             activeOpacity={0.7}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isFocused }}
+            accessibilityLabel={`${meta.label} tab`}
           >
-            <Text style={styles.icon}>{tab.icon}</Text>
-            <Text
-              style={[
-                styles.label,
-                { color: isFocused ? colors.activeCyan : colors.secondaryText },
-              ]}
-            >
-              {tab.label}
+            <Icon name={meta.icon} size={22} color={isFocused ? colors.activeCyan : '#A9B8C6'} />
+            <Text style={[styles.label, { color: isFocused ? colors.activeCyan : '#A9B8C6' }]} numberOfLines={1}>
+              {meta.label}
             </Text>
             {isFocused && <View style={styles.activeDot} />}
           </TouchableOpacity>
@@ -57,27 +59,25 @@ const BottomNavigation = ({ state, descriptors, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    height: 65,
+    minHeight: 65,
     backgroundColor: colors.primaryDarkNavy,
     borderTopWidth: 1,
     borderTopColor: colors.secondaryNavy,
-    paddingBottom: 5,
+    paddingTop: 6,
     alignItems: 'center',
     justifyContent: 'space-around',
   },
   tabButton: {
     flex: 1,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
   },
-  icon: {
-    fontSize: 18,
-    marginBottom: 2,
-  },
   label: {
     fontSize: 11,
     fontWeight: '600',
+    marginTop: 3,
   },
   activeDot: {
     width: 4,

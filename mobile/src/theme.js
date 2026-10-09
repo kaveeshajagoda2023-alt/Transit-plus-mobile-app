@@ -10,6 +10,19 @@ export const colors = {
   secondaryText: '#667085',
   border: '#E4E7EB',
   divider: '#CBD5E1',
+
+  // Added in Milestone 03 for accessibility (see docs/DEVIATIONS.md).
+  // tealCyan fails WCAG contrast as text on white, so teal text uses tealText.
+  tealText: '#00727E',
+  tealTint: '#E6FAFC',
+  danger: '#B42318',
+  dangerBg: '#FEF3F2',
+  success: '#137333',
+  successBg: '#E6F4EA',
+  warning: '#8A4B00',
+  warningBg: '#FEF7E0',
+  mutedBg: '#EEF2F6',
+  overlay: 'rgba(6, 42, 69, 0.6)',
 };
 
 export const theme = {
@@ -27,6 +40,8 @@ export const theme = {
     badge: 20,
     pill: 999,
   },
+  // Minimum touch target (Material guideline: 48dp)
+  touch: 48,
   shadows: {
     card: {
       shadowColor: '#062A45',

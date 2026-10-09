@@ -1,130 +1,242 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
-import { colors, theme } from '../../theme';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors } from '../../theme';
 import TicketCard from '../../components/TicketCard';
-import { getUserTickets } from '../../services/api';
+import ScreenHeader from '../../components/ScreenHeader';
+import TextField from '../../components/TextField';
+import Chip from '../../components/Chip';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { Banner, EmptyState, ErrorState, SkeletonList } from '../../components/Feedback';
+import { useToast } from '../../context/ToastContext';
+import { listTickets, hideTicket, rebookTicket } from '../../services/ticketService';
+import { TICKET_FILTERS } from '../../utils/constants';
+import { goToTab } from '../../navigation/navHelpers';
 
-const DEFAULT_USER_ID = 'USR-PASSENGER-101';
+const PAGE_SIZE = 10;
+
+const EMPTY_TEXT = {
+  ALL: ['No tickets yet', "You haven't bought any tickets yet. Buy one and your QR pass will appear here."],
+  ACTIVE: ['No active tickets', 'Tickets you can travel with right now will show here.'],
+  USED: ['No used tickets', 'Tickets scanned on a bus appear here.'],
+  CANCELLED: ['No cancelled tickets', 'Cancelled and refunded tickets appear here.'],
+  EXPIRED: ['No expired tickets', 'Tickets whose travel window passed appear here.'],
+};
 
 const TicketHistoryScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const toast = useToast();
+  const [filter, setFilter] = useState('ALL');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [tickets, setTickets] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
-
-  const fetchHistory = useCallback(async (isRefreshed = false) => {
-    try {
-      if (isRefreshed) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-
-      const res = await getUserTickets(DEFAULT_USER_ID);
-
-      if (res && res.success) {
-        setTickets(res.tickets || []);
-      } else {
-        setError(res?.message || 'Failed to load ticket purchase history');
-      }
-    } catch (err) {
-      setError(err.message || 'Unable to connect to TransitPulse server.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const [moreError, setMoreError] = useState(null);
+  const [confirm, setConfirm] = useState(null); // { type: 'hide' | 'rebook', ticket }
+  const [acting, setActing] = useState(false);
+  const requestId = useRef(0);
 
   useEffect(() => {
-    fetchHistory();
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const fetchHistory = useCallback(
+    async (mode = 'initial', pageToLoad = 1) => {
+      // Ignore responses from older requests (e.g. when the filter changes quickly)
+      const id = ++requestId.current;
+      if (mode === 'refresh') setRefreshing(true);
+      else if (mode === 'more') setLoadingMore(true);
+      else setLoading(true);
+      if (mode !== 'more') setError(null);
+      setMoreError(null);
+
+      try {
+        const status = TICKET_FILTERS.find((f) => f.key === filter)?.status;
+        const res = await listTickets({
+          page: pageToLoad,
+          limit: PAGE_SIZE,
+          ...(status ? { status } : {}),
+          ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        });
+        if (id !== requestId.current) return;
+        setTickets((prev) => (pageToLoad === 1 ? res.items : [...prev, ...res.items]));
+        setPage(res.page);
+        setTotalPages(res.totalPages);
+      } catch (err) {
+        if (id !== requestId.current) return;
+        if (mode === 'more') setMoreError(err.message);
+        else setError(err.message || 'Unable to connect to TransitPulse server.');
+      } finally {
+        if (id === requestId.current) {
+          setLoading(false);
+          setRefreshing(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [filter, debouncedSearch]
+  );
+
+  useEffect(() => {
+    fetchHistory('initial', 1);
   }, [fetchHistory]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      fetchHistory(true);
-    });
+  // Refresh silently when coming back from details / checkout
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      fetchHistory('refresh', 1);
+    }, [fetchHistory])
+  );
 
-    return unsubscribe;
-  }, [fetchHistory, navigation]);
+  const loadMore = () => {
+    if (loading || loadingMore || refreshing || page >= totalPages || moreError) return;
+    fetchHistory('more', page + 1);
+  };
 
   const handleViewQR = (selectedTicket) => {
-    navigation.navigate('DigitalQRPass', { ticket: selectedTicket });
+    navigation.navigate('DigitalQRPass', { ticketId: selectedTicket._id });
   };
 
   const handleViewDetails = (selectedTicket) => {
-    navigation.navigate('TicketDetails', { ticket: selectedTicket });
+    navigation.navigate('TicketDetails', { ticketId: selectedTicket._id });
   };
 
+  const handlePay = (selectedTicket) => navigation.navigate('PassengerCheckout', { ticket: selectedTicket });
+
+  const runConfirmed = async () => {
+    const { type, ticket } = confirm;
+    setActing(true);
+    try {
+      if (type === 'hide') {
+        const res = await hideTicket(ticket._id);
+        setTickets((prev) => prev.filter((t) => t._id !== ticket._id));
+        toast.show(res.message, 'success');
+      } else {
+        const res = await rebookTicket(ticket._id);
+        toast.show(res.message, 'info');
+        navigation.navigate('PassengerCheckout', { ticket: res.data });
+      }
+      setConfirm(null);
+    } catch (e) {
+      toast.show(e.message, 'error');
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const [emptyTitle, emptyMessage] = debouncedSearch
+    ? ['No matching tickets', `Nothing found for "${debouncedSearch}". Try a ticket number, stop or route.`]
+    : EMPTY_TEXT[filter];
+
   return (
-    <View style={styles.container}>
-      {/* Screen Header */}
+    <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
       <View style={styles.headerContainer}>
-        <Text style={styles.screenTitle}>Ticket Purchase History</Text>
-        <Text style={styles.screenSubtitle}>
-          View all past purchases and access dynamic QR passes
-        </Text>
+        <ScreenHeader title="My Tickets" subtitle="Purchase history, QR passes and refunds" style={styles.header} />
+        <TextField
+          icon="search"
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search ticket no., stop or route"
+          accessibilityLabel="Search tickets"
+          autoCorrect={false}
+          returnKeyType="search"
+          style={styles.search}
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityRole="tablist">
+          {TICKET_FILTERS.map((f) => (
+            <Chip
+              key={f.key}
+              label={f.label}
+              selected={filter === f.key}
+              onPress={() => setFilter(f.key)}
+              accessibilityLabel={`Show ${f.label.toLowerCase()} tickets`}
+            />
+          ))}
+        </ScrollView>
       </View>
 
-      {/* Loading State */}
       {loading && !refreshing ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.tealCyan} />
-          <Text style={styles.loadingText}>Loading ticket history...</Text>
+        <View style={styles.listContent}>
+          <SkeletonList />
         </View>
       ) : error ? (
-        /* Error State */
-        <View style={styles.centerContainer}>
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={() => fetchHistory()}>
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ErrorState message={error} onRetry={() => fetchHistory('initial', 1)} />
       ) : (
-        /* Tickets List / Empty State */
         <FlatList
           data={tickets}
-          keyExtractor={(item) => item.ticketId || item._id}
+          keyExtractor={(item) => item._id}
           renderItem={({ item }) => (
             <TicketCard
               ticket={item}
               onViewQR={handleViewQR}
               onViewDetails={handleViewDetails}
+              onPay={handlePay}
+              onHide={(t) => setConfirm({ type: 'hide', ticket: t })}
+              onRebook={(t) => setConfirm({ type: 'rebook', ticket: t })}
             />
           )}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, tickets.length === 0 && styles.flexGrow]}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => fetchHistory(true)}
-              colors={[colors.tealCyan]}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={() => fetchHistory('refresh', 1)} colors={[colors.tealCyan]} />
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color={colors.tealCyan} style={styles.footerSpinner} />
+            ) : moreError ? (
+              <Banner type="error" message={moreError} actionLabel="Retry" onAction={() => fetchHistory('more', page + 1)} />
+            ) : tickets.length > 0 && page >= totalPages ? (
+              <Text style={styles.endText}>You've reached the end of your history</Text>
+            ) : null
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🎫</Text>
-              <Text style={styles.emptyTitle}>No Tickets Found</Text>
-              <Text style={styles.emptySubtitle}>
-                You haven't purchased any transit tickets yet. Complete a checkout to view your dynamic pass here!
-              </Text>
-              <TouchableOpacity
-                style={styles.checkoutButton}
-                onPress={() => navigation.navigate('PassengerCheckout')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.checkoutButtonText}>Purchase a Ticket</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              icon="ticket"
+              title={emptyTitle}
+              message={emptyMessage}
+              actionLabel={filter === 'ALL' && !debouncedSearch ? 'Buy a ticket' : undefined}
+              onAction={() => goToTab(navigation, 'BuyTicket')}
+            />
           }
         />
       )}
+
+      <ConfirmDialog
+        visible={!!confirm}
+        title={confirm?.type === 'hide' ? 'Remove from history?' : 'Rebook this trip?'}
+        message={
+          confirm?.type === 'hide'
+            ? `Ticket ${confirm?.ticket.ticketNumber} will be hidden from your history. Receipts stay in Payment History.`
+            : `A new ticket from ${confirm?.ticket.fromStop} to ${confirm?.ticket.toStop} will be created for now. You can change the time before paying.`
+        }
+        confirmLabel={confirm?.type === 'hide' ? 'Remove' : 'Rebook'}
+        icon={confirm?.type === 'hide' ? 'eye-off' : 'refresh'}
+        destructive={confirm?.type === 'hide'}
+        loading={acting}
+        onConfirm={runConfirmed}
+        onCancel={() => setConfirm(null)}
+      />
     </View>
   );
 };
@@ -136,99 +248,28 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
   },
-  screenTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: colors.primaryDarkNavy,
+  header: {
+    marginBottom: 12,
   },
-  screenSubtitle: {
-    fontSize: 13,
-    color: colors.secondaryText,
-    marginTop: 4,
+  search: {
+    marginBottom: 8,
   },
   listContent: {
     padding: 16,
     paddingBottom: 32,
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
+  flexGrow: {
+    flexGrow: 1,
   },
-  loadingText: {
-    marginTop: 12,
-    color: colors.secondaryText,
-    fontSize: 14,
+  footerSpinner: {
+    marginVertical: 16,
   },
-  errorBox: {
-    backgroundColor: '#FCE8E6',
-    borderWidth: 1,
-    borderColor: '#F5C6CB',
-    borderRadius: theme.borderRadius.card,
-    padding: 20,
-    alignItems: 'center',
-    width: '100%',
-  },
-  errorText: {
-    color: '#C5221F',
-    fontSize: 14,
-    fontWeight: '600',
+  endText: {
     textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 14,
-    backgroundColor: colors.primaryDarkNavy,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: theme.borderRadius.button,
-  },
-  retryButtonText: {
-    color: colors.white,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  emptyContainer: {
-    backgroundColor: colors.white,
-    borderRadius: theme.borderRadius.card,
-    padding: 32,
-    alignItems: 'center',
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...theme.shadows.card,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.primaryDarkNavy,
-    marginBottom: 6,
-  },
-  emptySubtitle: {
-    fontSize: 13,
     color: colors.secondaryText,
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 18,
-  },
-  checkoutButton: {
-    backgroundColor: colors.tealCyan,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.button,
-    ...theme.shadows.button,
-  },
-  checkoutButtonText: {
-    color: colors.white,
-    fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 12,
+    marginVertical: 12,
   },
 });
 

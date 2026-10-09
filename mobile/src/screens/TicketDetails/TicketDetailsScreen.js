@@ -1,163 +1,277 @@
-import React, { useState } from 'react';
-import {
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, theme } from '../../theme';
 import StatusBadge from '../../components/StatusBadge';
-import { cancelTicket } from '../../services/api';
+import InfoRow from '../../components/InfoRow';
+import AppButton from '../../components/AppButton';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import Icon from '../../components/Icon';
+import { ErrorState, LoadingView } from '../../components/Feedback';
+import { useToast } from '../../context/ToastContext';
+import { getTicket, hideTicket, rebookTicket } from '../../services/ticketService';
+import { PAYMENT_METHOD_LABEL } from '../../utils/constants';
+import { formatDateTime, formatLKR, passengerTypeLabel, routeLabel } from '../../utils/format';
 
 const TicketDetailsScreen = ({ route, navigation }) => {
-  const ticket = route?.params?.ticket;
-  const [cancelling, setCancelling] = useState(false);
+  const toast = useToast();
+  // Accepts { ticketId } or a full { ticket } (older callers)
+  const ticketId = route?.params?.ticketId || route?.params?.ticket?._id;
+  const [ticket, setTicket] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [confirmHide, setConfirmHide] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  if (!ticket) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Ticket details are unavailable.</Text>
-      </View>
-    );
-  }
+  const load = useCallback(
+    async (isRefresh = false) => {
+      if (!ticketId) {
+        setError('Ticket details are unavailable.');
+        setLoading(false);
+        return;
+      }
+      if (isRefresh) setRefreshing(true);
+      setError(null);
+      try {
+        setTicket(await getTicket(ticketId));
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [ticketId]
+  );
 
-  const handleCancel = async () => {
-    Alert.alert('CANCEL TICKET?', 'Are you sure you want to cancel this ticket?', [
-      { text: 'Keep Ticket', style: 'default' },
-      {
-        text: 'Cancel Ticket',
-        style: 'destructive',
-        onPress: async () => {
-          setCancelling(true);
-          try {
-            const response = await cancelTicket(ticket.ticketId || ticket._id);
-            if (response?.success) {
-              const updatedTicket = { ...ticket, ticketStatus: 'Cancelled' };
-              navigation.navigate('TicketHistory', { refreshedTicket: updatedTicket });
-              Alert.alert('Ticket Cancelled', 'Ticket cancelled successfully.');
-            } else {
-              throw new Error(response?.message || 'Cancellation failed.');
-            }
-          } catch (error) {
-            Alert.alert('Cancellation Failed', error.message || 'Unable to cancel the ticket.');
-          } finally {
-            setCancelling(false);
-          }
-        },
-      },
-    ]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
+
+  if (loading) return <LoadingView message="Loading ticket..." />;
+  if (error || !ticket) return <ErrorState message={error} onRetry={() => load()} />;
+
+  const { actions = {}, cancellation = {}, payment } = ticket;
+
+  const handleHide = async () => {
+    setBusy(true);
+    try {
+      const res = await hideTicket(ticket._id);
+      toast.show(res.message, 'success');
+      setConfirmHide(false);
+      navigation.goBack();
+    } catch (e) {
+      toast.show(e.message, 'error');
+      setBusy(false);
+    }
   };
 
-  const canCancel = ticket.ticketStatus === 'Active';
+  const handleRebook = async () => {
+    setBusy(true);
+    try {
+      const res = await rebookTicket(ticket._id);
+      toast.show(res.message, 'info');
+      navigation.navigate('PassengerCheckout', { ticket: res.data });
+    } catch (e) {
+      toast.show(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const paymentMethod = payment
+    ? payment.method === 'CARD' && payment.cardLast4
+      ? `${payment.cardBrand} •••• ${payment.cardLast4}`
+      : PAYMENT_METHOD_LABEL[payment.method]
+    : 'Not paid';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.screenTitle}>Ticket Details</Text>
-        <Text style={styles.screenSubtitle}>Review the complete purchase information.</Text>
-      </View>
-
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} colors={[colors.tealCyan]} />}
+    >
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.label}>Ticket ID</Text>
-            <Text style={styles.value}>{ticket.ticketId || ticket._id}</Text>
+          <View style={styles.flex}>
+            <Text style={styles.label}>Ticket number</Text>
+            <Text style={styles.ticketNumber} selectable>
+              {ticket.ticketNumber}
+            </Text>
           </View>
-          <StatusBadge status={ticket.ticketStatus} />
+          <StatusBadge status={ticket.status} large />
         </View>
+        <Text style={styles.routeText}>{routeLabel(ticket.route)}</Text>
 
         <View style={styles.divider} />
-        <View style={styles.row}>
-          <Text style={styles.label}>Passenger</Text>
-          <Text style={styles.value}>{ticket.passengerName || ticket.userId}</Text>
+        <View style={styles.journey}>
+          <View style={styles.flex}>
+            <Text style={styles.label}>From</Text>
+            <Text style={styles.stop}>{ticket.fromStop}</Text>
+          </View>
+          <Icon name="arrow-right" size={20} color={colors.secondaryText} />
+          <View style={[styles.flex, styles.alignRight]}>
+            <Text style={styles.label}>To</Text>
+            <Text style={styles.stop}>{ticket.toStop}</Text>
+          </View>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>From</Text>
-          <Text style={styles.value}>{ticket.boardingPoint || ticket.from}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>To</Text>
-          <Text style={styles.value}>{ticket.destination || ticket.to}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Route</Text>
-          <Text style={styles.value}>{ticket.route}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Date</Text>
-          <Text style={styles.value}>{ticket.travelDate}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Time</Text>
-          <Text style={styles.value}>{ticket.travelTime}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Fare</Text>
-          <Text style={[styles.value, { color: colors.tealCyan, fontWeight: '700' }]}>Rs. {Number(ticket.fare).toFixed(2)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Payment Method</Text>
-          <Text style={styles.value}>{ticket.paymentMethod || 'Simulated Pay'}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Payment Status</Text>
-          <Text style={styles.value}>{ticket.paymentStatus || 'Completed'}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Ticket Status</Text>
-          <Text style={styles.value}>{ticket.ticketStatus || 'Active'}</Text>
-        </View>
+        <View style={styles.divider} />
+
+        <InfoRow icon="calendar" label="Departure" value={formatDateTime(ticket.travelDate)} />
+        <InfoRow icon="clock" label="Valid from" value={formatDateTime(ticket.validFrom)} />
+        <InfoRow icon="hourglass" label="Valid until" value={formatDateTime(ticket.validUntil)} />
+        <InfoRow icon="users" label="Passengers" value={`${ticket.passengers} × ${passengerTypeLabel(ticket.passengerType)}`} />
+        <InfoRow label="Fare per passenger" value={formatLKR(ticket.unitFare)} />
+        <InfoRow label="Total fare" value={formatLKR(ticket.totalFare)} bold />
+        <InfoRow icon="card" label="Payment" value={paymentMethod} />
+        {ticket.usedAt ? <InfoRow icon="check-double" label="Used at" value={formatDateTime(ticket.usedAt)} /> : null}
+        {ticket.cancelledAt ? <InfoRow icon="x-circle" label="Cancelled at" value={formatDateTime(ticket.cancelledAt)} /> : null}
+        {['CANCELLED', 'REFUNDED'].includes(ticket.status) ? (
+          <InfoRow icon="refund" label="Refund" value={formatLKR(ticket.refundAmount)} bold valueColor="#5B21B6" />
+        ) : null}
       </View>
 
+      {actions.canCancel && ticket.status === 'ACTIVE' ? (
+        <View style={styles.policy}>
+          <Icon name="info" size={18} color={colors.tealText} />
+          <Text style={styles.policyText}>
+            If you cancel now: {cancellation.refundPercent}% refund ({formatLKR(cancellation.refundAmount)}). {cancellation.reason}.
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => navigation.navigate('DigitalQRPass', { ticket })}
-        >
-          <Text style={styles.primaryButtonText}>View QR Pass</Text>
-        </TouchableOpacity>
-        {canCancel && (
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={handleCancel}
-            disabled={cancelling}
-          >
-            {cancelling ? <ActivityIndicator color={colors.white} /> : <Text style={styles.cancelButtonText}>Cancel Ticket</Text>}
-          </TouchableOpacity>
-        )}
+        {actions.canShowQr ? (
+          <AppButton title="Show QR pass" icon="qr" onPress={() => navigation.navigate('DigitalQRPass', { ticketId: ticket._id })} />
+        ) : null}
+        {actions.canPay ? (
+          <AppButton title="Pay now" icon="card" onPress={() => navigation.navigate('PassengerCheckout', { ticket })} />
+        ) : null}
+        {actions.canEdit ? (
+          <AppButton title="Change trip" icon="edit" variant="secondary" onPress={() => navigation.navigate('EditTicket', { ticket })} />
+        ) : null}
+        {payment?.receiptNumber ? (
+          <AppButton
+            title="View receipt"
+            icon="receipt"
+            variant="secondary"
+            onPress={() => navigation.navigate('PaymentReceipt', { paymentId: payment._id })}
+          />
+        ) : null}
+        {actions.canHide ? (
+          <AppButton title="Rebook this trip" icon="refresh" variant="secondary" onPress={handleRebook} loading={busy && !confirmHide} />
+        ) : null}
+        {actions.canCancel ? (
+          <AppButton
+            title="Cancel ticket"
+            icon="x-circle"
+            variant="dangerOutline"
+            onPress={() => navigation.navigate('CancelTicket', { ticket })}
+            accessibilityHint="Shows the refund before you confirm"
+          />
+        ) : null}
+        {actions.canHide ? (
+          <AppButton title="Remove from history" icon="eye-off" variant="dangerOutline" onPress={() => setConfirmHide(true)} />
+        ) : null}
       </View>
+
+      <ConfirmDialog
+        visible={confirmHide}
+        title="Remove from history?"
+        message={`Ticket ${ticket.ticketNumber} will no longer appear in My Tickets.`}
+        confirmLabel="Remove"
+        destructive
+        icon="eye-off"
+        loading={busy}
+        onConfirm={handleHide}
+        onCancel={() => setConfirmHide(false)}
+      />
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.lightBackground },
-  contentContainer: { padding: 16, paddingBottom: 32 },
-  headerContainer: { marginBottom: 16 },
-  screenTitle: { fontSize: 22, fontWeight: 'bold', color: colors.primaryDarkNavy },
-  screenSubtitle: { color: colors.secondaryText, fontSize: 13, marginTop: 4 },
+  container: {
+    flex: 1,
+    backgroundColor: colors.lightBackground,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  flex: {
+    flex: 1,
+  },
+  alignRight: {
+    alignItems: 'flex-end',
+  },
   card: {
     backgroundColor: colors.white,
     borderRadius: theme.borderRadius.card,
-    padding: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
     ...theme.shadows.card,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: 14 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 16, marginBottom: 12 },
-  label: { color: colors.secondaryText, fontSize: 12, flex: 0.8 },
-  value: { color: colors.primaryText, fontSize: 13, fontWeight: '600', flex: 1.2, textAlign: 'right' },
-  errorText: { color: colors.secondaryText, textAlign: 'center', marginTop: 20 },
-  actions: { gap: 10, marginTop: 16 },
-  primaryButton: { backgroundColor: colors.tealCyan, borderRadius: theme.borderRadius.button, paddingVertical: 14, alignItems: 'center' },
-  primaryButtonText: { color: colors.white, fontWeight: '700' },
-  cancelButton: { backgroundColor: '#C5221F', borderRadius: theme.borderRadius.button, paddingVertical: 14, alignItems: 'center' },
-  cancelButtonText: { color: colors.white, fontWeight: '700' },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  label: {
+    fontSize: 11,
+    color: colors.secondaryText,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  ticketNumber: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.primaryDarkNavy,
+    marginTop: 2,
+  },
+  routeText: {
+    fontSize: 14,
+    color: colors.secondaryText,
+    marginTop: 8,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 12,
+  },
+  journey: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stop: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primaryText,
+    marginTop: 2,
+  },
+  policy: {
+    flexDirection: 'row',
+    backgroundColor: colors.tealTint,
+    borderRadius: theme.borderRadius.button,
+    padding: 12,
+    marginTop: 14,
+  },
+  policyText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: colors.primaryText,
+    lineHeight: 19,
+  },
+  actions: {
+    marginTop: 16,
+    gap: 10,
+  },
 });
 
 export default TicketDetailsScreen;

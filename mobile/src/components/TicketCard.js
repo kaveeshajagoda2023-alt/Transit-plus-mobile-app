@@ -1,70 +1,97 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, theme } from '../theme';
+import { formatDate, formatLKR, formatTime, passengerTypeLabel, routeLabel } from '../utils/format';
 import StatusBadge from './StatusBadge';
+import Icon from './Icon';
 
-const TicketCard = ({ ticket, onViewQR, onViewDetails }) => {
+const ActionButton = ({ label, icon, onPress, accessibilityLabel, primary = false }) => (
+  <TouchableOpacity
+    style={[styles.actionButton, primary && styles.actionPrimary]}
+    onPress={onPress}
+    activeOpacity={0.8}
+    accessibilityRole="button"
+    accessibilityLabel={accessibilityLabel}
+  >
+    <Icon name={icon} size={16} color={primary ? colors.primaryDarkNavy : colors.secondaryNavy} />
+    <Text style={[styles.actionText, primary && styles.actionTextPrimary]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+// Ticket summary card. Buttons are shown based on ticket.actions from the API.
+const TicketCard = ({ ticket, onViewQR, onViewDetails, onHide, onRebook, onPay, compact = false }) => {
+  const actions = ticket.actions || {};
+  const number = ticket.ticketNumber || ticket.ticketId || ticket._id;
+
   return (
-    <View style={styles.card}>
-      {/* Top Header Row */}
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => onViewDetails?.(ticket)}
+      activeOpacity={0.9}
+      accessibilityRole="button"
+      accessibilityLabel={`Ticket ${number}, ${ticket.fromStop} to ${ticket.toStop}, ${formatDate(ticket.travelDate)}. Open details`}
+    >
       <View style={styles.cardHeader}>
         <View style={styles.routeInfo}>
           <Text style={styles.labelText}>Route</Text>
           <Text style={styles.routeText} numberOfLines={1}>
-            {ticket.route}
+            {routeLabel(ticket.route)}
           </Text>
-          <Text style={styles.ticketIdText}>Ticket ID: {ticket.ticketId || ticket._id}</Text>
+          <Text style={styles.ticketIdText}>{number}</Text>
         </View>
-        <StatusBadge status={ticket.ticketStatus} />
+        <StatusBadge status={ticket.status} />
       </View>
 
       <View style={styles.divider} />
 
-      {/* Boarding and Destination Route */}
       <View style={styles.journeySnippet}>
+        <Icon name="map-pin" size={16} color={colors.tealText} />
         <Text style={styles.locationText} numberOfLines={1}>
-          📍 {ticket.boardingPoint} ➔ {ticket.destination}
+          {ticket.fromStop}
+        </Text>
+        <Icon name="arrow-right" size={14} color={colors.secondaryText} />
+        <Text style={styles.locationText} numberOfLines={1}>
+          {ticket.toStop}
         </Text>
       </View>
 
-      {/* Schedule and Fare */}
       <View style={styles.detailRow}>
         <View style={styles.scheduleContainer}>
           <Text style={styles.labelText}>Date &amp; Time</Text>
           <Text style={styles.scheduleText}>
-            🗓️ {ticket.travelDate} • {ticket.travelTime}
+            {formatDate(ticket.travelDate)} · {formatTime(ticket.travelDate)}
+          </Text>
+          <Text style={styles.scheduleText}>
+            {ticket.passengers} × {passengerTypeLabel(ticket.passengerType)}
           </Text>
         </View>
         <View style={styles.fareContainer}>
           <Text style={styles.labelText}>Fare</Text>
-          <Text style={styles.fareText}>${Number(ticket.fare).toFixed(2)}</Text>
+          <Text style={styles.fareText}>{formatLKR(ticket.totalFare)}</Text>
         </View>
       </View>
 
-      <View style={styles.divider} />
-
-      {/* Action Buttons to View the Dynamic QR Pass and ticket details */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={styles.qrButton}
-          onPress={() => onViewQR(ticket)}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={`View Dynamic QR Pass for ticket ${ticket.ticketId || ticket._id}`}
-        >
-          <Text style={styles.qrButtonText}>View QR 📱</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.detailsButton}
-          onPress={() => onViewDetails(ticket)}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={`View details for ticket ${ticket.ticketId || ticket._id}`}
-        >
-          <Text style={styles.detailsButtonText}>View Details</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      {!compact && (
+        <>
+          <View style={styles.divider} />
+          <View style={styles.actionRow}>
+            {actions.canShowQr && onViewQR ? (
+              <ActionButton primary label="Show QR" icon="qr" onPress={() => onViewQR(ticket)} accessibilityLabel={`Show QR code for ticket ${number}`} />
+            ) : null}
+            {actions.canPay && onPay ? (
+              <ActionButton primary label="Pay now" icon="card" onPress={() => onPay(ticket)} accessibilityLabel={`Pay for ticket ${number}`} />
+            ) : null}
+            {actions.canHide && onRebook ? (
+              <ActionButton label="Rebook" icon="refresh" onPress={() => onRebook(ticket)} accessibilityLabel={`Rebook the trip on ticket ${number}`} />
+            ) : null}
+            {actions.canHide && onHide ? (
+              <ActionButton label="Hide" icon="eye-off" onPress={() => onHide(ticket)} accessibilityLabel={`Remove ticket ${number} from history`} />
+            ) : null}
+            <ActionButton label="Details" icon="chevron-right" onPress={() => onViewDetails?.(ticket)} accessibilityLabel={`View details for ticket ${number}`} />
+          </View>
+        </>
+      )}
+    </TouchableOpacity>
   );
 };
 
@@ -110,12 +137,16 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   journeySnippet: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
   },
   locationText: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.primaryText,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginHorizontal: 6,
+    flexShrink: 1,
   },
   detailRow: {
     flexDirection: 'row',
@@ -137,42 +168,39 @@ const styles = StyleSheet.create({
   fareText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: colors.tealCyan,
+    color: colors.tealText,
     marginTop: 2,
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
   },
-  qrButton: {
-    flex: 1,
-    backgroundColor: colors.lightBackground,
-    borderWidth: 1,
-    borderColor: colors.tealCyan,
-    borderRadius: theme.borderRadius.button,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  qrButtonText: {
-    color: colors.primaryDarkNavy,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  detailsButton: {
-    flex: 1,
+  actionButton: {
+    flexGrow: 1,
+    flexDirection: 'row',
+    minHeight: theme.touch,
     backgroundColor: colors.lightBackground,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: theme.borderRadius.button,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    margin: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  detailsButtonText: {
-    color: colors.secondaryText,
+  actionPrimary: {
+    borderColor: colors.tealCyan,
+    backgroundColor: colors.tealTint,
+  },
+  actionText: {
+    color: colors.secondaryNavy,
     fontSize: 13,
     fontWeight: '700',
+    marginLeft: 6,
+  },
+  actionTextPrimary: {
+    color: colors.primaryDarkNavy,
   },
 });
 

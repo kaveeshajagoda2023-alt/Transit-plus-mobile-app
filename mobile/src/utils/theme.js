@@ -1,4 +1,7 @@
 // Member 2 Figma Visual Design System Colors & Tokens
+// Kept for backwards compatibility. New code imports { colors, theme } from '../theme'.
+import { colors } from '../theme';
+
 export const COLORS = {
   primaryDarkNavy: '#062A45',
   secondaryNavy: '#0B3B5C',
@@ -11,6 +14,9 @@ export const COLORS = {
   border: '#E4E7EB',
   error: '#D32F2F',
   success: '#2E7D32',
+  tealText: colors.tealText,
+  danger: colors.danger,
+  warning: colors.warning,
 };
 
 export const SPACING = {

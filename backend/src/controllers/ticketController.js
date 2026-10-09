@@ -1,397 +1,273 @@
-const Ticket = require('../models/Ticket');
 const mongoose = require('mongoose');
-const { validationResult } = require('express-validator');
+const Ticket = require('../models/Ticket');
+const Route = require('../models/Route');
+const Payment = require('../models/Payment');
+const AppError = require('../utils/AppError');
+const asyncHandler = require('../utils/asyncHandler');
+const { ok, created } = require('../utils/respond');
+const { calculateFare } = require('../utils/fare');
+const { ticketNumber } = require('../utils/ids');
+const { createQrToken, QR_TTL_SECONDS } = require('../utils/qrToken');
+const {
+  validityWindow,
+  cancellationPreview,
+  canEdit,
+  canHide,
+  expireIfNeeded,
+  serializeTicket,
+} = require('../utils/ticketRules');
 
-// In-memory fallback store when MongoDB local service is offline
-let inMemoryTickets = [];
+const MAX_DAYS_AHEAD = 30;
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// @desc    Create new digital pass / ticket
-// @route   POST /api/tickets
-// @access  Public
-const createTicket = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-
-  try {
-    const {
-      userId,
-      passengerName,
-      route,
-      boardingPoint,
-      destination,
-      travelDate,
-      travelTime,
-      fare,
-      paymentMethod,
-    } = req.body;
-
-    const ticketId = `TKT-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const normalizedFare = Number(fare);
-
-    const qrPayload = JSON.stringify({
-      ticketId,
-      passengerId: userId,
-      route,
-      from: boardingPoint,
-      to: destination,
-      travelDate,
-      travelTime,
-      fare: normalizedFare,
-      status: 'Active',
-    });
-
-    const ticketPayload = {
-      ticketId,
-      userId,
-      passengerName: passengerName || 'Transit Passenger',
-      route,
-      boardingPoint,
-      destination,
-      travelDate,
-      travelTime,
-      fare: normalizedFare,
-      paymentMethod: paymentMethod || 'Simulated Pay',
-      paymentStatus: 'Completed',
-      ticketStatus: 'Active',
-      qrData: qrPayload,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (mongoose.connection.readyState === 1) {
-      const ticket = new Ticket(ticketPayload);
-      const savedTicket = await ticket.save();
-      return res.status(201).json({
-        success: true,
-        message: 'Ticket created successfully',
-        ticket: savedTicket,
-      });
-    } else {
-      inMemoryTickets.unshift(ticketPayload);
-      return res.status(201).json({
-        success: true,
-        message: 'Ticket created successfully (In-Memory)',
-        ticket: ticketPayload,
-      });
-    }
-  } catch (error) {
-    console.error('Error creating ticket:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error creating ticket',
-      error: error.message,
-    });
+const assertTravelDate = (travelDate) => {
+  const t = new Date(travelDate).getTime();
+  const now = Date.now();
+  // Small grace period so "depart now" still works with slightly different phone clocks
+  if (t < now - 30 * 60 * 1000) throw new AppError('Travel date cannot be in the past', 400);
+  if (t > now + MAX_DAYS_AHEAD * 24 * 60 * 60 * 1000) {
+    throw new AppError(`Tickets can be bought up to ${MAX_DAYS_AHEAD} days ahead`, 400);
   }
 };
 
-// @desc    Get passenger ticket history by userId
-// @route   GET /api/tickets/user/:userId
-// @access  Public
-const getUserTickets = async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    if (mongoose.connection.readyState === 1) {
-      const tickets = await Ticket.find({ userId }).sort({ createdAt: -1 });
-      return res.status(200).json({
-        success: true,
-        count: tickets.length,
-        tickets,
-      });
-    } else {
-      const userTickets = inMemoryTickets.filter((t) => t.userId === userId);
-      return res.status(200).json({
-        success: true,
-        count: userTickets.length,
-        tickets: userTickets,
-      });
+// Insert with a fresh ticket number, retrying on the (rare) duplicate number
+const insertTicket = async (data) => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await Ticket.create({ ...data, ticketNumber: ticketNumber() });
+    } catch (e) {
+      if (!(e.code === 11000 && e.keyPattern?.ticketNumber)) throw e;
     }
-  } catch (error) {
-    console.error('Error fetching passenger tickets:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error fetching user tickets',
-      error: error.message,
-    });
+  }
+  throw new AppError('Could not generate a ticket number, please try again', 500);
+};
+
+const buildTicket = async ({ user, routeId, fromStop, toStop, passengerType, passengers, travelDate }) => {
+  const route = await Route.findById(routeId);
+  if (!route || !route.isActive) throw new AppError('Route not found', 404);
+
+  const fare = calculateFare(route, fromStop, toStop, passengerType, passengers);
+  const ticket = await insertTicket({
+    user: user._id,
+    route: route._id,
+    fromStop: fare.from,
+    toStop: fare.to,
+    passengerType,
+    passengers,
+    unitFare: fare.unitFare,
+    totalFare: fare.totalFare,
+    travelDate,
+    ...validityWindow(travelDate),
+    status: 'PENDING_PAYMENT',
+  });
+  return ticket.populate('route', 'code name stops');
+};
+
+// Accepts a Mongo _id or a ticket number; only returns the caller's own ticket
+const findOwnedTicket = async (req) => {
+  const { id } = req.params;
+  const filter = mongoose.isValidObjectId(id) ? { _id: id } : { ticketNumber: id };
+  const ticket = await Ticket.findOne({ ...filter, user: req.user._id })
+    .populate('route', 'code name stops')
+    .populate('payment');
+  if (!ticket) throw new AppError('Ticket not found', 404);
+  return expireIfNeeded(ticket);
+};
+
+// @route POST /api/tickets  -> PENDING_PAYMENT ticket
+const createTicket = asyncHandler(async (req, res) => {
+  const { routeId, fromStop, toStop, passengers = 1, travelDate } = req.body;
+  assertTravelDate(travelDate);
+  const ticket = await buildTicket({
+    user: req.user,
+    routeId,
+    fromStop,
+    toStop,
+    passengerType: req.body.passengerType || req.user.passengerType,
+    passengers: Number(passengers),
+    travelDate: new Date(travelDate),
+  });
+  return created(res, serializeTicket(ticket), 'Ticket created - complete payment to activate it');
+});
+
+// @route GET /api/tickets?status=ACTIVE,USED&from=&to=&search=&page=&limit=
+const listTickets = asyncHandler(async (req, res) => {
+  const now = new Date();
+  const userId = req.user._id;
+
+  await Ticket.updateMany({ user: userId, status: 'ACTIVE', validUntil: { $lt: now } }, { status: 'EXPIRED' });
+
+  const filter = { user: userId, hiddenFromHistory: false };
+  if (req.query.status) filter.status = { $in: req.query.status.split(',') };
+  if (req.query.from || req.query.to) {
+    filter.travelDate = {};
+    if (req.query.from) filter.travelDate.$gte = new Date(req.query.from);
+    if (req.query.to) filter.travelDate.$lte = new Date(req.query.to);
+  }
+  if (req.query.search) {
+    const rx = new RegExp(escapeRegex(req.query.search.trim()), 'i');
+    const routeIds = await Route.find({ $or: [{ code: rx }, { name: rx }] }).distinct('_id');
+    filter.$or = [{ ticketNumber: rx }, { fromStop: rx }, { toStop: rx }, { route: { $in: routeIds } }];
+  }
+
+  const page = Number(req.query.page || 1);
+  const limit = Number(req.query.limit || 10);
+  const [items, total] = await Promise.all([
+    Ticket.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('route', 'code name'),
+    Ticket.countDocuments(filter),
+  ]);
+
+  return ok(res, {
+    items: items.map((t) => serializeTicket(t, now)),
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  });
+});
+
+// @route GET /api/tickets/:id
+const getTicket = asyncHandler(async (req, res) => {
+  const ticket = await findOwnedTicket(req);
+  return ok(res, serializeTicket(ticket));
+});
+
+// @route PUT /api/tickets/:id  body: { travelDate?, passengers? }
+const updateTicket = asyncHandler(async (req, res) => {
+  const ticket = await findOwnedTicket(req);
+  if (!canEdit(ticket)) throw new AppError('This ticket can no longer be changed', 409);
+
+  const { travelDate, passengers } = req.body;
+
+  if (passengers !== undefined && Number(passengers) !== ticket.passengers) {
+    // Changing the head count after payment would change the price that was already charged
+    if (ticket.status !== 'PENDING_PAYMENT') {
+      throw new AppError('Passenger count can only be changed before payment. Cancel and rebook instead.', 409);
+    }
+    ticket.passengers = Number(passengers);
+    ticket.totalFare = ticket.unitFare * ticket.passengers;
+  }
+
+  if (travelDate !== undefined) {
+    assertTravelDate(travelDate);
+    ticket.travelDate = new Date(travelDate);
+    Object.assign(ticket, validityWindow(ticket.travelDate));
+    ticket.qrVersion += 1; // invalidate QR codes issued for the old time
+  }
+
+  await ticket.save();
+  return ok(res, serializeTicket(ticket), 'Ticket updated');
+});
+
+// @route POST /api/tickets/:id/cancel
+const cancelTicket = asyncHandler(async (req, res) => {
+  const ticket = await findOwnedTicket(req);
+  const preview = cancellationPreview(ticket);
+  if (!preview.allowed) throw new AppError(preview.reason, 409);
+
+  const now = new Date();
+  const payment = ticket.payment ? await Payment.findById(ticket.payment._id || ticket.payment) : null;
+
+  if (payment && payment.status === 'SUCCESS' && preview.refundAmount > 0) {
+    payment.status = 'REFUNDED';
+    payment.refundAmount = preview.refundAmount;
+    payment.refundedAt = now;
+    await payment.save();
+  } else if (payment && payment.status === 'PENDING') {
+    // Cash-on-board ticket cancelled before boarding: nothing was collected
+    payment.status = 'FAILED';
+    payment.failureReason = 'Cancelled before boarding';
+    await payment.save();
+  }
+
+  ticket.status = preview.refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
+  ticket.cancelledAt = now;
+  ticket.refundAmount = preview.refundAmount;
+  ticket.qrVersion += 1;
+  await ticket.save();
+  if (payment) ticket.payment = payment;
+
+  return ok(
+    res,
+    serializeTicket(ticket),
+    preview.refundAmount > 0 ? `Ticket cancelled. LKR ${preview.refundAmount} will be refunded.` : 'Ticket cancelled'
+  );
+});
+
+// @route DELETE /api/tickets/:id  -> soft delete (hide from history)
+const hideTicket = asyncHandler(async (req, res) => {
+  const ticket = await findOwnedTicket(req);
+  if (!canHide(ticket)) {
+    throw new AppError('Only used, expired or cancelled tickets can be removed from history', 409);
+  }
+  ticket.hiddenFromHistory = true;
+  await ticket.save();
+  return ok(res, { _id: ticket._id }, 'Ticket removed from history');
+});
+
+// @route POST /api/tickets/:id/rebook  body: { travelDate? }  -> new PENDING_PAYMENT ticket
+const rebookTicket = asyncHandler(async (req, res) => {
+  const original = await findOwnedTicket(req);
+  const travelDate = req.body.travelDate ? new Date(req.body.travelDate) : new Date();
+  assertTravelDate(travelDate);
+  const ticket = await buildTicket({
+    user: req.user,
+    routeId: original.route._id,
+    fromStop: original.fromStop,
+    toStop: original.toStop,
+    passengerType: original.passengerType,
+    passengers: original.passengers,
+    travelDate,
+  });
+  return created(res, serializeTicket(ticket), 'Trip rebooked - complete payment to activate it');
+});
+
+const issueQr = (res, ticket) => {
+  const qr = createQrToken(ticket);
+  return ok(res, {
+    token: qr.token,
+    qrVersion: qr.qrVersion,
+    issuedAt: qr.issuedAt,
+    expiresAt: qr.expiresAt,
+    ttlSeconds: QR_TTL_SECONDS,
+    serverTime: Date.now(),
+  });
+};
+
+const assertQrAvailable = (ticket) => {
+  if (ticket.status !== 'ACTIVE') {
+    throw new AppError(`A QR code is only available for active tickets (this one is ${ticket.status})`, 409);
   }
 };
 
-// @desc    Get single ticket by ticketId or _id
-// @route   GET /api/tickets/:id
-// @access  Public
-const getTicketById = async (req, res) => {
-  try {
-    const { id } = req.params;
+// @route GET /api/tickets/:id/qr
+const getQr = asyncHandler(async (req, res) => {
+  const ticket = await findOwnedTicket(req);
+  assertQrAvailable(ticket);
+  return issueQr(res, ticket);
+});
 
-    if (mongoose.connection.readyState === 1) {
-      let ticket = await Ticket.findOne({ ticketId: id });
-      if (!ticket && id.match(/^[0-9a-fA-F]{24}$/)) {
-        ticket = await Ticket.findById(id);
-      }
-
-      if (!ticket) {
-        return res.status(404).json({
-          success: false,
-          message: 'Ticket not found',
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        ticket,
-      });
-    } else {
-      const ticket = inMemoryTickets.find((t) => t.ticketId === id || t._id === id);
-      if (!ticket) {
-        return res.status(404).json({
-          success: false,
-          message: 'Ticket not found',
-        });
-      }
-      return res.status(200).json({
-        success: true,
-        ticket,
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching ticket by ID:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error fetching ticket details',
-      error: error.message,
-    });
-  }
-};
-
-// @desc    Update ticket status (e.g. Active -> Used / Expired / Cancelled)
-// @route   PUT /api/tickets/:id/status
-// @access  Public
-const updateTicketStatus = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-
-  try {
-    const { id } = req.params;
-    const { ticketStatus } = req.body;
-
-    if (mongoose.connection.readyState === 1) {
-      let ticket = await Ticket.findOne({ ticketId: id });
-      if (!ticket && id.match(/^[0-9a-fA-F]{24}$/)) {
-        ticket = await Ticket.findById(id);
-      }
-
-      if (!ticket) {
-        return res.status(404).json({
-          success: false,
-          message: 'Ticket not found',
-        });
-      }
-
-      ticket.ticketStatus = ticketStatus;
-
-      try {
-        const parsedQr = JSON.parse(ticket.qrData);
-        parsedQr.status = ticketStatus;
-        ticket.qrData = JSON.stringify(parsedQr);
-      } catch (e) {}
-
-      const updatedTicket = await ticket.save();
-
-      return res.status(200).json({
-        success: true,
-        message: `Ticket status updated to ${ticketStatus}`,
-        ticket: updatedTicket,
-      });
-    } else {
-      const ticketIndex = inMemoryTickets.findIndex((t) => t.ticketId === id || t._id === id);
-      if (ticketIndex === -1) {
-        return res.status(404).json({
-          success: false,
-          message: 'Ticket not found',
-        });
-      }
-
-      inMemoryTickets[ticketIndex].ticketStatus = ticketStatus;
-      try {
-        const parsedQr = JSON.parse(inMemoryTickets[ticketIndex].qrData);
-        parsedQr.status = ticketStatus;
-        inMemoryTickets[ticketIndex].qrData = JSON.stringify(parsedQr);
-      } catch (e) {}
-
-      return res.status(200).json({
-        success: true,
-        message: `Ticket status updated to ${ticketStatus}`,
-        ticket: inMemoryTickets[ticketIndex],
-      });
-    }
-  } catch (error) {
-    console.error('Error updating ticket status:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error updating ticket status',
-      error: error.message,
-    });
-  }
-};
-
-// @desc    Cancel/delete ticket if permitted
-// @route   DELETE /api/tickets/:id
-// @access  Public
-const validateQrTicket = async (req, res) => {
-  try {
-    const { ticketId } = req.body;
-
-    if (!ticketId || typeof ticketId !== 'string' || ticketId.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        status: 'INVALID',
-        message: 'A ticket ID is required',
-      });
-    }
-
-    let ticket;
-    if (mongoose.connection.readyState === 1) {
-      ticket = await Ticket.findOne({ ticketId: ticketId.trim() });
-    } else {
-      ticket = inMemoryTickets.find((item) => item.ticketId === ticketId.trim());
-    }
-
-    if (!ticket) {
-      return res.status(404).json({
-        success: false,
-        status: 'INVALID',
-        message: 'Ticket not found',
-      });
-    }
-
-    const status = ticket.ticketStatus || 'Active';
-    if (status === 'Cancelled') {
-      return res.status(200).json({
-        success: false,
-        status: 'CANCELLED',
-        message: 'Ticket cancelled',
-        ticket: { ticketId: ticket.ticketId, passengerName: ticket.passengerName },
-      });
-    }
-
-    if (status === 'Used') {
-      return res.status(200).json({
-        success: false,
-        status: 'ALREADY_USED',
-        message: 'Ticket has already been used',
-        ticket: { ticketId: ticket.ticketId, passengerName: ticket.passengerName },
-      });
-    }
-
-    if (status === 'Expired') {
-      return res.status(200).json({
-        success: false,
-        status: 'EXPIRED',
-        message: 'Ticket has expired',
-        ticket: { ticketId: ticket.ticketId, passengerName: ticket.passengerName },
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      status: 'VALID',
-      message: 'Valid TransitPulse ticket',
-      ticket: {
-        ticketId: ticket.ticketId,
-        passengerName: ticket.passengerName,
-        route: ticket.route,
-        from: ticket.boardingPoint,
-        to: ticket.destination,
-        travelDate: ticket.travelDate,
-        travelTime: ticket.travelTime,
-        fare: ticket.fare,
-        status: ticket.ticketStatus,
-      },
-    });
-  } catch (error) {
-    console.error('Error validating QR ticket:', error.message);
-    return res.status(500).json({
-      success: false,
-      status: 'INVALID',
-      message: 'Unable to validate ticket',
-    });
-  }
-};
-
-const deleteTicket = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (mongoose.connection.readyState === 1) {
-      let ticket = await Ticket.findOne({ ticketId: id });
-      if (!ticket && id.match(/^[0-9a-fA-F]{24}$/)) {
-        ticket = await Ticket.findById(id);
-      }
-
-      if (!ticket) {
-        return res.status(404).json({
-          success: false,
-          message: 'Ticket not found',
-        });
-      }
-
-      if (ticket.ticketStatus === 'Used') {
-        return res.status(400).json({
-          success: false,
-          message: 'Cannot cancel a ticket that has already been used',
-        });
-      }
-
-      ticket.ticketStatus = 'Cancelled';
-      await ticket.save();
-
-      return res.status(200).json({
-        success: true,
-        message: 'Ticket cancelled successfully',
-        ticket,
-      });
-    } else {
-      const ticketIndex = inMemoryTickets.findIndex((t) => t.ticketId === id || t._id === id);
-      if (ticketIndex === -1) {
-        return res.status(404).json({
-          success: false,
-          message: 'Ticket not found',
-        });
-      }
-
-      if (inMemoryTickets[ticketIndex].ticketStatus === 'Used') {
-        return res.status(400).json({
-          success: false,
-          message: 'Cannot cancel a ticket that has already been used',
-        });
-      }
-
-      inMemoryTickets[ticketIndex].ticketStatus = 'Cancelled';
-      return res.status(200).json({
-        success: true,
-        message: 'Ticket cancelled successfully',
-        ticket: inMemoryTickets[ticketIndex],
-      });
-    }
-  } catch (error) {
-    console.error('Error cancelling ticket:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error cancelling ticket',
-      error: error.message,
-    });
-  }
-};
+// @route POST /api/tickets/:id/qr/rotate
+const rotateQr = asyncHandler(async (req, res) => {
+  const ticket = await findOwnedTicket(req);
+  assertQrAvailable(ticket);
+  ticket.qrVersion += 1;
+  await ticket.save();
+  return issueQr(res, ticket);
+});
 
 module.exports = {
   createTicket,
-  getUserTickets,
-  getTicketById,
-  updateTicketStatus,
-  validateQrTicket,
-  deleteTicket,
+  listTickets,
+  getTicket,
+  updateTicket,
+  cancelTicket,
+  hideTicket,
+  rebookTicket,
+  getQr,
+  rotateQr,
 };
