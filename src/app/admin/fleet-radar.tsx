@@ -6,7 +6,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function FleetRadarScreen() {
   const [filterRoute, setFilterRoute] = useState('All');
-  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
 
   const vehicles = [
     { id: 'TN-0821', label: 'TN-0821', route: 'Route 42', type: 'Bus', top: '35%', left: '42%', status: 'Active', driver: 'Saran Diya', speed: 42, occupancy: 36 },
@@ -63,7 +63,7 @@ export default function FleetRadarScreen() {
               key={v.id}
               style={[
                 styles.vehicleMarker,
-                { top: v.top, left: v.left },
+                { top: v.top as any, left: v.left as any },
                 isDelayed && styles.markerDelayed,
                 isMaintenance && styles.markerMaintenance,
                 isSelected && styles.markerSelected

@@ -5,7 +5,7 @@ import { Search, AlertOctagon, CheckCircle2, XCircle, Filter, FileText, ChevronR
 export default function TicketAuditScreen() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [selectedTicket, setSelectedTicket] = useState<any>(null);
 
   const ticketAudits = [
     { ticketId: '#TK-9824-B01', passType: 'Single Journey Pass', routeId: 'Route 42', fare: 65.00, passengerName: 'Elena Rosiera', scannedAt: '10:42 AM', conductorId: 'CND-77492', status: 'valid', anomalyReason: '' },
