@@ -11,18 +11,18 @@ export default function AdminLayout() {
       screenOptions={{
         header: () => <AdminHeader activeAlertsCount={1} />,
         tabBarStyle: isLogin ? { display: 'none' } : {
-          backgroundColor: '#0f172a',
+          backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: 'rgba(255, 255, 255, 0.1)',
+          borderTopColor: '#F1F5F9',
           height: 60,
           paddingBottom: 8,
           paddingTop: 8,
         },
-        tabBarActiveTintColor: '#0ea5e9',
-        tabBarInactiveTintColor: '#94a3b8',
+        tabBarActiveTintColor: '#0F2942',
+        tabBarInactiveTintColor: '#64748B',
         tabBarLabelStyle: {
           fontSize: 10,
-          fontWeight: '600',
+          fontWeight: '700',
         },
       }}
     >

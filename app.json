@@ -54,7 +54,8 @@
           "cameraPermission": "Allow TransitPulse to access your camera to scan passenger QR tickets."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

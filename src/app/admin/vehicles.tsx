@@ -32,6 +32,7 @@ import {
   Clock,
   Sparkles,
 } from 'lucide-react-native';
+import { TransitColors, TransitShadows } from '@/constants/transitTheme';
 
 export interface VehicleRecord {
   vehicleId: string;
@@ -372,35 +373,35 @@ export default function VehicleManagementScreen() {
       <View style={styles.ribbonContainer}>
         <View style={styles.ribbonCard}>
           <Text style={styles.ribbonLabel}>Total Fleet</Text>
-          <Text style={[styles.ribbonVal, { color: '#0ea5e9' }]}>{totalCount}</Text>
+          <Text style={[styles.ribbonVal, { color: '#0284c7' }]}>{totalCount}</Text>
         </View>
         <View style={styles.ribbonCard}>
           <Text style={styles.ribbonLabel}>Active</Text>
-          <Text style={[styles.ribbonVal, { color: '#10b981' }]}>{activeCount}</Text>
+          <Text style={[styles.ribbonVal, { color: '#059669' }]}>{activeCount}</Text>
         </View>
         <View style={styles.ribbonCard}>
           <Text style={styles.ribbonLabel}>Delayed</Text>
-          <Text style={[styles.ribbonVal, { color: '#f59e0b' }]}>{delayedCount}</Text>
+          <Text style={[styles.ribbonVal, { color: '#d97706' }]}>{delayedCount}</Text>
         </View>
         <View style={styles.ribbonCard}>
           <Text style={styles.ribbonLabel}>Service</Text>
-          <Text style={[styles.ribbonVal, { color: '#f43f5e' }]}>{maintCount}</Text>
+          <Text style={[styles.ribbonVal, { color: '#dc2626' }]}>{maintCount}</Text>
         </View>
       </View>
 
       {/* Search Input Bar */}
       <View style={styles.searchBar}>
-        <Search size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+        <Search size={18} color="#64748b" style={{ marginRight: 8 }} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search by Vehicle ID, driver, or route..."
-          placeholderTextColor="#64748b"
+          placeholderTextColor="#94a3b8"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <X size={16} color="#94a3b8" />
+            <X size={16} color="#64748b" />
           </TouchableOpacity>
         )}
       </View>
@@ -429,7 +430,7 @@ export default function VehicleManagementScreen() {
       <ScrollView style={styles.feedScroll} contentContainerStyle={{ paddingBottom: 28 }}>
         {filteredVehicles.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Bus size={42} color="#475569" />
+            <Bus size={42} color="#94a3b8" />
             <Text style={styles.emptyTitle}>No matching vehicles found</Text>
             <Text style={styles.emptySubtext}>
               Try adjusting your search query or filter selection.
@@ -448,11 +449,11 @@ export default function VehicleManagementScreen() {
                 {/* Card Header */}
                 <View style={styles.cardHeader}>
                   <View style={styles.cardIdGroup}>
-                    <View style={[styles.typeIconContainer, { backgroundColor: v.transportType === 'Train' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(14, 165, 233, 0.2)' }]}>
+                    <View style={[styles.typeIconContainer, { backgroundColor: v.transportType === 'Train' ? '#EEF2FF' : '#E0F2FE' }]}>
                       {v.transportType === 'Train' ? (
-                        <Train size={18} color="#818cf8" />
+                        <Train size={18} color="#4F46E5" />
                       ) : (
-                        <Bus size={18} color="#0ea5e9" />
+                        <Bus size={18} color="#0284C7" />
                       )}
                     </View>
                     <View>
@@ -480,12 +481,12 @@ export default function VehicleManagementScreen() {
                 {/* Telemetry & Driver Specs Row */}
                 <View style={styles.specsRow}>
                   <View style={styles.specItem}>
-                    <Users size={14} color="#94a3b8" />
+                    <Users size={14} color="#64748b" />
                     <Text style={styles.specLabel}>Driver:</Text>
                     <Text style={styles.specVal} numberOfLines={1}>{v.driverName}</Text>
                   </View>
                   <View style={styles.specItem}>
-                    <Gauge size={14} color="#94a3b8" />
+                    <Gauge size={14} color="#64748b" />
                     <Text style={styles.specLabel}>Speed:</Text>
                     <Text style={styles.specVal}>{v.speed} km/h</Text>
                   </View>
@@ -505,7 +506,7 @@ export default function VehicleManagementScreen() {
                         styles.progressBar,
                         {
                           width: `${occupancyPct}%`,
-                          backgroundColor: occupancyPct > 85 ? '#f43f5e' : occupancyPct > 60 ? '#f59e0b' : '#10b981',
+                          backgroundColor: occupancyPct > 85 ? '#ef4444' : occupancyPct > 60 ? '#f59e0b' : '#10b981',
                         },
                       ]}
                     />
@@ -519,14 +520,14 @@ export default function VehicleManagementScreen() {
                   accessibilityLabel="View vehicle health diagnostics"
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Wrench size={13} color="#38bdf8" style={{ marginRight: 6 }} />
+                    <Wrench size={13} color="#0284c7" style={{ marginRight: 6 }} />
                     <Text style={styles.healthText}>
-                      Health: <Text style={{ color: (v.healthScore ?? 90) < 70 ? '#f43f5e' : '#38bdf8', fontWeight: '700' }}>{v.healthScore ?? 90}%</Text> • Next: {v.nextInspection ?? '24 Oct'}
+                      Health: <Text style={{ color: (v.healthScore ?? 90) < 70 ? '#ef4444' : '#0284c7', fontWeight: '700' }}>{v.healthScore ?? 90}%</Text> • Next: {v.nextInspection ?? '24 Oct'}
                     </Text>
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={styles.healthDetailLink}>Inspect</Text>
-                    <ChevronRight size={13} color="#38bdf8" />
+                    <ChevronRight size={13} color="#0284c7" />
                   </View>
                 </TouchableOpacity>
 
@@ -537,7 +538,7 @@ export default function VehicleManagementScreen() {
                     onPress={() => router.push('/admin/alerts')}
                     accessibilityLabel="Broadcast Disruption alert for this route"
                   >
-                    <AlertTriangle size={14} color="#f59e0b" style={{ marginRight: 6 }} />
+                    <AlertTriangle size={14} color="#d97706" style={{ marginRight: 6 }} />
                     <Text style={styles.alertPromptText}>
                       Affected route delay detected. Broadcast Passenger Alert →
                     </Text>
@@ -550,7 +551,7 @@ export default function VehicleManagementScreen() {
                     style={styles.actionBtnSecondary}
                     onPress={() => router.push('/admin/fleet-radar')}
                   >
-                    <Radio size={14} color="#0ea5e9" style={{ marginRight: 4 }} />
+                    <Radio size={14} color="#0284c7" style={{ marginRight: 4 }} />
                     <Text style={styles.actionBtnSecondaryText}>Radar Map</Text>
                   </TouchableOpacity>
 
@@ -558,18 +559,18 @@ export default function VehicleManagementScreen() {
                     style={styles.actionBtnSecondary}
                     onPress={() => handleOpenEdit(v)}
                   >
-                    <Edit3 size={14} color="#94a3b8" style={{ marginRight: 4 }} />
+                    <Edit3 size={14} color="#64748b" style={{ marginRight: 4 }} />
                     <Text style={styles.actionBtnSecondaryText}>Edit Specs</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.actionBtnSecondary, { borderColor: 'rgba(244, 63, 94, 0.25)' }]}
+                    style={[styles.actionBtnSecondary, { borderColor: '#FECDD3', backgroundColor: '#FFF1F2' }]}
                     onPress={() => {
                       setSelectedVehicle(v);
                       setShowDeleteModal(true);
                     }}
                   >
-                    <Trash2 size={14} color="#f43f5e" />
+                    <Trash2 size={14} color="#e11d48" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -588,7 +589,7 @@ export default function VehicleManagementScreen() {
                 <Text style={styles.modalTitle}>Add New Fleet Vehicle</Text>
               </View>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                <X size={22} color="#94a3b8" />
+                <X size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
@@ -599,7 +600,7 @@ export default function VehicleManagementScreen() {
                 value={formId}
                 onChangeText={setFormId}
                 placeholder="e.g. TN-0865"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
               />
 
               <Text style={styles.inputLabel}>Transport Mode</Text>
@@ -611,7 +612,7 @@ export default function VehicleManagementScreen() {
                     setFormCapacity('50');
                   }}
                 >
-                  <Bus size={16} color={formType === 'Bus' ? '#fff' : '#94a3b8'} style={{ marginRight: 6 }} />
+                  <Bus size={16} color={formType === 'Bus' ? '#fff' : '#64748b'} style={{ marginRight: 6 }} />
                   <Text style={[styles.segmentBtnText, formType === 'Bus' && styles.segmentBtnTextActive]}>Bus / BRT</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -621,7 +622,7 @@ export default function VehicleManagementScreen() {
                     setFormCapacity('200');
                   }}
                 >
-                  <Train size={16} color={formType === 'Train' ? '#fff' : '#94a3b8'} style={{ marginRight: 6 }} />
+                  <Train size={16} color={formType === 'Train' ? '#fff' : '#64748b'} style={{ marginRight: 6 }} />
                   <Text style={[styles.segmentBtnText, formType === 'Train' && styles.segmentBtnTextActive]}>Train Service</Text>
                 </TouchableOpacity>
               </View>
@@ -650,7 +651,7 @@ export default function VehicleManagementScreen() {
                 value={formDriver}
                 onChangeText={setFormDriver}
                 placeholder="e.g. Saran Diya"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
               />
 
               <Text style={styles.inputLabel}>Maximum Seating Capacity</Text>
@@ -660,7 +661,7 @@ export default function VehicleManagementScreen() {
                 onChangeText={setFormCapacity}
                 keyboardType="numeric"
                 placeholder="e.g. 50"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
               />
 
               <Text style={styles.inputLabel}>Initial Status</Text>
@@ -700,7 +701,7 @@ export default function VehicleManagementScreen() {
                 <Text style={styles.modalTitle}>Edit #{selectedVehicle?.vehicleId}</Text>
               </View>
               <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <X size={22} color="#94a3b8" />
+                <X size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
@@ -764,11 +765,11 @@ export default function VehicleManagementScreen() {
                 <Text style={styles.modalTitle}>Set Status: #{selectedVehicle?.vehicleId}</Text>
               </View>
               <TouchableOpacity onPress={() => setShowStatusModal(false)}>
-                <X size={22} color="#94a3b8" />
+                <X size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 14 }}>
+            <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 14 }}>
               Instantly toggle the operational readiness of this fleet unit across the system:
             </Text>
 
@@ -812,14 +813,14 @@ export default function VehicleManagementScreen() {
                 <Text style={[styles.modalTitle, { color: '#f43f5e' }]}>Decommission Vehicle</Text>
               </View>
               <TouchableOpacity onPress={() => setShowDeleteModal(false)}>
-                <X size={22} color="#94a3b8" />
+                <X size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <Text style={{ color: '#e2e8f0', fontSize: 14, marginVertical: 14, lineHeight: 20 }}>
-              Are you sure you want to remove <Text style={{ fontWeight: '700', color: '#fff' }}>#{selectedVehicle?.vehicleId}</Text> from the active TransitPlus fleet inventory?
+            <Text style={{ color: '#334155', fontSize: 14, marginVertical: 14, lineHeight: 20 }}>
+              Are you sure you want to remove <Text style={{ fontWeight: '700', color: '#0F172A' }}>#{selectedVehicle?.vehicleId}</Text> from the active TransitPlus fleet inventory?
             </Text>
-            <Text style={{ color: '#94a3b8', fontSize: 12, marginBottom: 18 }}>
+            <Text style={{ color: '#64748b', fontSize: 12, marginBottom: 18 }}>
               This unit will be deregistered from live GPS broadcasts and removed from operator duty rosters.
             </Text>
 
@@ -846,7 +847,7 @@ export default function VehicleManagementScreen() {
                 <Text style={styles.modalTitle}>Health Log: #{selectedVehicle?.vehicleId}</Text>
               </View>
               <TouchableOpacity onPress={() => setShowHealthModal(false)}>
-                <X size={22} color="#94a3b8" />
+                <X size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
@@ -912,7 +913,7 @@ export default function VehicleManagementScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 16,
     paddingTop: 12,
   },
@@ -924,7 +925,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 11,
-    color: '#0ea5e9',
+    color: '#0284C7',
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -932,23 +933,20 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#0F172A',
     letterSpacing: -0.4,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0284c7',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: '#0F2942',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 10,
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
+    ...TransitShadows.card,
   },
   addButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
     marginLeft: 4,
@@ -960,19 +958,20 @@ const styles = StyleSheet.create({
   },
   ribbonCard: {
     flex: 1,
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
     marginHorizontal: 3,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: '#E2E8F0',
+    ...TransitShadows.card,
   },
   ribbonLabel: {
     fontSize: 10,
-    color: '#94a3b8',
+    color: '#64748B',
     textTransform: 'uppercase',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   ribbonVal: {
     fontSize: 18,
@@ -982,17 +981,18 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#E2E8F0',
     marginBottom: 10,
+    ...TransitShadows.card,
   },
   searchInput: {
     flex: 1,
-    color: '#fff',
+    color: '#0F172A',
     fontSize: 13,
     padding: 0,
   },
@@ -1006,40 +1006,38 @@ const styles = StyleSheet.create({
     paddingRight: 10,
   },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: 'rgba(30, 41, 59, 0.6)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#E2E8F0',
+    ...TransitShadows.card,
   },
   chipActive: {
-    backgroundColor: '#0ea5e9',
-    borderColor: '#38bdf8',
+    backgroundColor: '#0F2942',
+    borderColor: '#0F2942',
   },
   chipText: {
-    color: '#94a3b8',
+    color: '#64748B',
     fontSize: 12,
     fontWeight: '600',
   },
   chipTextActive: {
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   feedScroll: {
     flex: 1,
   },
   vehicleCard: {
-    backgroundColor: 'rgba(30, 41, 59, 0.75)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    borderColor: '#E2E8F0',
+    ...TransitShadows.card,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1061,25 +1059,25 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   cardIdText: {
-    color: '#fff',
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: '800',
     marginRight: 6,
   },
   typeTag: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
   },
   typeTagText: {
-    color: '#cbd5e1',
+    color: '#475569',
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   cardRouteText: {
-    color: '#94a3b8',
+    color: '#64748B',
     fontSize: 12,
     marginTop: 1,
   },
@@ -1104,11 +1102,13 @@ const styles = StyleSheet.create({
   specsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    backgroundColor: '#F8FAFC',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   specItem: {
     flexDirection: 'row',
@@ -1116,15 +1116,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   specLabel: {
-    color: '#64748b',
+    color: '#64748B',
     fontSize: 11,
     marginLeft: 4,
     marginRight: 4,
   },
   specVal: {
-    color: '#e2e8f0',
+    color: '#0F172A',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   occupancyContainer: {
     marginBottom: 10,
@@ -1136,18 +1136,18 @@ const styles = StyleSheet.create({
   },
   occupancyTitle: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: '#64748B',
     fontWeight: '600',
   },
   occupancyCount: {
     fontSize: 11,
-    color: '#cbd5e1',
+    color: '#0F172A',
     fontWeight: '700',
   },
   progressTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#E2E8F0',
     overflow: 'hidden',
   },
   progressBar: {
@@ -1158,37 +1158,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
+    backgroundColor: '#F0F9FF',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.2)',
+    borderColor: '#BAE6FD',
     marginBottom: 10,
   },
   healthText: {
     fontSize: 11,
-    color: '#e0f2fe',
+    color: '#0369A1',
   },
   healthDetailLink: {
     fontSize: 11,
-    color: '#38bdf8',
+    color: '#0284C7',
     fontWeight: '700',
     marginRight: 2,
   },
   alertPromptBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    backgroundColor: '#FEF3C7',
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: '#FDE68A',
     marginBottom: 10,
   },
   alertPromptText: {
-    color: '#f59e0b',
+    color: '#B45309',
     fontSize: 11,
     fontWeight: '600',
     flex: 1,
@@ -1203,14 +1203,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#E2E8F0',
     borderRadius: 8,
     paddingVertical: 8,
   },
   actionBtnSecondaryText: {
-    color: '#cbd5e1',
+    color: '#0F172A',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -1220,13 +1220,13 @@ const styles = StyleSheet.create({
     paddingVertical: 50,
   },
   emptyTitle: {
-    color: '#fff',
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: '700',
     marginTop: 12,
   },
   emptySubtext: {
-    color: '#94a3b8',
+    color: '#64748B',
     fontSize: 12,
     marginTop: 4,
     textAlign: 'center',
@@ -1235,31 +1235,32 @@ const styles = StyleSheet.create({
   emptyResetBtn: {
     marginTop: 16,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#0ea5e9',
+    paddingVertical: 9,
+    backgroundColor: '#0F2942',
     borderRadius: 8,
   },
   emptyResetText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 12,
   },
   // Modals styling
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
   },
   modalContent: {
     width: '100%',
-    backgroundColor: '#1e293b',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#E2E8F0',
     maxHeight: '90%',
+    ...TransitShadows.card,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1269,31 +1270,31 @@ const styles = StyleSheet.create({
   },
   modalSub: {
     fontSize: 11,
-    color: '#0ea5e9',
+    color: '#0284C7',
     textTransform: 'uppercase',
     fontWeight: '700',
   },
   modalTitle: {
     fontSize: 18,
-    color: '#fff',
+    color: '#0F172A',
     fontWeight: '800',
     marginTop: 2,
   },
   inputLabel: {
-    color: '#94a3b8',
+    color: '#475569',
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
     marginTop: 10,
   },
   modalInput: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#F8FAFC',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    color: '#fff',
+    borderColor: '#CBD5E1',
+    color: '#0F172A',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     fontSize: 13,
   },
   segmentedRow: {
@@ -1305,23 +1306,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0f172a',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#E2E8F0',
     borderRadius: 8,
     paddingVertical: 8,
   },
   segmentBtnActive: {
-    backgroundColor: '#0284c7',
-    borderColor: '#38bdf8',
+    backgroundColor: '#0F2942',
+    borderColor: '#0F2942',
   },
   segmentBtnText: {
-    color: '#94a3b8',
+    color: '#64748B',
     fontSize: 12,
     fontWeight: '600',
   },
   segmentBtnTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   modalActions: {
@@ -1334,10 +1335,10 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#F1F5F9',
   },
   cancelBtnText: {
-    color: '#cbd5e1',
+    color: '#475569',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -1348,22 +1349,22 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0284c7',
+    backgroundColor: '#0F2942',
   },
   confirmBtnText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
   },
   statusOptionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: '#F8FAFC',
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: '#E2E8F0',
   },
   statusOptionTitle: {
     fontSize: 13,
@@ -1371,32 +1372,32 @@ const styles = StyleSheet.create({
   },
   statusOptionDesc: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: '#64748B',
     marginTop: 2,
   },
   healthOverviewBanner: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(14, 165, 233, 0.12)',
+    backgroundColor: '#F0F9FF',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.25)',
+    borderColor: '#BAE6FD',
     marginVertical: 10,
   },
   healthScoreBig: {
-    color: '#38bdf8',
+    color: '#0284C7',
     fontSize: 28,
     fontWeight: '900',
   },
   healthScoreLabel: {
-    color: '#94a3b8',
+    color: '#64748B',
     fontSize: 11,
     marginTop: 2,
   },
   healthInspectionBadge: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1404,20 +1405,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: '#F8FAFC',
     padding: 10,
     borderRadius: 8,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: '#E2E8F0',
   },
   checkTitle: {
-    color: '#e2e8f0',
+    color: '#0F172A',
     fontSize: 12,
     fontWeight: '700',
   },
   checkSub: {
-    color: '#94a3b8',
+    color: '#64748B',
     fontSize: 10,
     marginTop: 1,
   },

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Shield, Lock, Eye, EyeOff, Fingerprint, UserCheck, AlertCircle } from 'lucide-react-native';
+import { TransitColors, TransitShadows } from '@/constants/transitTheme';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
@@ -60,7 +61,7 @@ export default function AdminLoginScreen() {
 
         <View style={styles.formCard}>
           <View style={styles.formHeader}>
-            <UserCheck size={16} color="#38bdf8" />
+            <UserCheck size={16} color="#0284C7" />
             <Text style={styles.formHeaderText}>
               {isRegistering ? 'New Coordinator Registration' : 'Staff Login & Clearance Verification'}
             </Text>
@@ -79,7 +80,7 @@ export default function AdminLoginScreen() {
             value={staffId}
             onChangeText={setStaffId}
             placeholder="e.g. CDR-8910@transitpulse.gov"
-            placeholderTextColor="#64748b"
+            placeholderTextColor="#94a3b8"
             autoCapitalize="none"
           />
 
@@ -90,14 +91,14 @@ export default function AdminLoginScreen() {
               value={passcode}
               onChangeText={setPasscode}
               placeholder="Enter security passcode"
-              placeholderTextColor="#64748b"
+              placeholderTextColor="#94a3b8"
               secureTextEntry={!showPasscode}
             />
             <TouchableOpacity 
               style={styles.eyeButton}
               onPress={() => setShowPasscode(!showPasscode)}
             >
-              {showPasscode ? <EyeOff size={18} color="#94a3b8" /> : <Eye size={18} color="#94a3b8" />}
+              {showPasscode ? <EyeOff size={18} color="#64748b" /> : <Eye size={18} color="#64748b" />}
             </TouchableOpacity>
           </View>
 
@@ -111,7 +112,7 @@ export default function AdminLoginScreen() {
 
         <View style={styles.footerActions}>
           <TouchableOpacity style={styles.quickLoginButton} onPress={handleQuickLogin}>
-            <Fingerprint size={18} color="#0ea5e9" />
+            <Fingerprint size={18} color="#0284C7" />
             <Text style={styles.quickLoginText}>Quick Biometric Face ID</Text>
           </TouchableOpacity>
 
@@ -129,7 +130,7 @@ export default function AdminLoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#F8FAFC',
   },
   content: {
     flex: 1,
@@ -144,33 +145,30 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 20,
-    backgroundColor: '#0284c7',
+    backgroundColor: '#0F2942',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 14,
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    ...TransitShadows.card,
   },
   title: {
     fontSize: 24,
-    color: '#fff',
+    color: '#0F172A',
     fontWeight: 'bold',
     marginBottom: 6,
   },
   titleHighlight: {
-    color: '#0ea5e9',
+    color: '#0284C7',
   },
   subtitle: {
     fontSize: 13,
-    color: '#94a3b8',
+    color: '#64748B',
+    textAlign: 'center',
   },
   tabsContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(30, 41, 59, 0.6)',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
     borderWidth: 1,
     borderRadius: 14,
     padding: 4,
@@ -183,22 +181,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   tabButtonActive: {
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#0F2942',
   },
   tabText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#94a3b8',
+    color: '#64748B',
   },
   tabTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   formCard: {
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#E2E8F0',
+    ...TransitShadows.card,
   },
   formHeader: {
     flexDirection: 'row',
@@ -206,38 +206,40 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   formHeaderText: {
-    color: '#38bdf8',
+    color: '#0284C7',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     marginLeft: 8,
   },
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(244, 63, 94, 0.15)',
+    backgroundColor: '#FEE2E2',
     borderWidth: 1,
-    borderColor: '#f43f5e',
+    borderColor: '#FCA5A5',
     borderRadius: 10,
     padding: 10,
     marginBottom: 14,
   },
   errorText: {
-    color: '#f43f5e',
+    color: '#DC2626',
     fontSize: 12,
     marginLeft: 8,
+    fontWeight: '600',
   },
   label: {
     fontSize: 12,
-    color: '#94a3b8',
+    color: '#475569',
+    fontWeight: '600',
     marginBottom: 6,
   },
   input: {
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#CBD5E1',
     borderRadius: 12,
     padding: 12,
-    color: '#fff',
+    color: '#0F172A',
     fontSize: 14,
     marginBottom: 16,
   },
@@ -250,24 +252,25 @@ const styles = StyleSheet.create({
   eyeButton: {
     position: 'absolute',
     right: 12,
-    top: 12,
+    top: 14,
   },
   submitButton: {
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#0F2942',
     borderRadius: 12,
     padding: 14,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
+    ...TransitShadows.card,
   },
   submitIcon: {
     marginRight: 8,
   },
   submitButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   footerActions: {
     flexDirection: 'row',
@@ -280,12 +283,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quickLoginText: {
-    color: '#0ea5e9',
+    color: '#0284C7',
     fontSize: 12,
     marginLeft: 6,
+    fontWeight: '700',
   },
   registerText: {
-    color: '#94a3b8',
+    color: '#64748B',
     fontSize: 12,
-  }
+    fontWeight: '600',
+  },
 });
