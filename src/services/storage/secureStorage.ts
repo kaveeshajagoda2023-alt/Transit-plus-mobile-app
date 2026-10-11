@@ -31,15 +31,28 @@ async function isSecureStoreAvailable(): Promise<boolean> {
   }
 }
 
+const withTimeout = (promise: Promise<any>, ms: number) => {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(value => {
+      clearTimeout(timer);
+      resolve(value);
+    }).catch(err => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+};
+
 async function setItem(key: string, value: string): Promise<void> {
   const store = await getSecureStoreModule();
   if (store) {
     try {
-      const available = await store.isAvailableAsync();
+      const available = await withTimeout(store.isAvailableAsync(), 1000);
       if (available) {
-        await store.setItemAsync(key, value, {
+        await withTimeout(store.setItemAsync(key, value, {
           keychainAccessible: store.AFTER_FIRST_UNLOCK,
-        });
+        }), 1000);
         return;
       }
     } catch {
@@ -63,9 +76,9 @@ async function getItem(key: string): Promise<string | null> {
   const store = await getSecureStoreModule();
   if (store) {
     try {
-      const available = await store.isAvailableAsync();
+      const available = await withTimeout(store.isAvailableAsync(), 1000);
       if (available) {
-        return await store.getItemAsync(key);
+        return (await withTimeout(store.getItemAsync(key), 1000)) as string | null;
       }
     } catch {
       // Fallback
@@ -87,7 +100,7 @@ async function deleteItem(key: string): Promise<void> {
   const store = await getSecureStoreModule();
   if (store) {
     try {
-      await store.deleteItemAsync(key);
+      await withTimeout(store.deleteItemAsync(key), 1000);
       return;
     } catch {
       // Fallback

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Dimensions } from 'react-native';
-import { Bus, Navigation, User, Gauge, Users, BatteryCharging, Radio, X } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Bus, Navigation, User, Gauge, Users, BatteryCharging, Radio, X, ChevronRight } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 
 export default function FleetRadarScreen() {
+  const router = useRouter();
   const [filterRoute, setFilterRoute] = useState('All');
   const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
 
@@ -144,6 +146,15 @@ export default function FleetRadarScreen() {
             </View>
             <Text style={styles.gpsText}>GPS Synced</Text>
           </View>
+
+          <TouchableOpacity
+            style={styles.manageFleetBtn}
+            onPress={() => router.push('/admin/vehicles')}
+            accessibilityLabel={`Manage vehicle ${selectedVehicle.id} in fleet inventory`}
+          >
+            <Text style={styles.manageFleetBtnText}>Manage in Fleet Inventory</Text>
+            <ChevronRight size={16} color="#0ea5e9" />
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -349,5 +360,22 @@ const styles = StyleSheet.create({
     color: '#10b981',
     fontSize: 10,
     fontWeight: '600',
-  }
+  },
+  manageFleetBtn: {
+    marginTop: 10,
+    backgroundColor: 'rgba(14, 165, 233, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(14, 165, 233, 0.3)',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  manageFleetBtnText: {
+    color: '#0ea5e9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });

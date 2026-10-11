@@ -1,0 +1,1424 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Modal,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import {
+  Bus,
+  Train,
+  Search,
+  Plus,
+  Radio,
+  Trash2,
+  Edit3,
+  ChevronRight,
+  X,
+  Gauge,
+  Users,
+  Wrench,
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
+  ShieldAlert,
+  ArrowRight,
+  Clock,
+  Sparkles,
+} from 'lucide-react-native';
+
+export interface VehicleRecord {
+  vehicleId: string;
+  routeId: string;
+  routeName: string;
+  transportType: 'Bus' | 'Train';
+  driverName: string;
+  driverId: string;
+  speed: number;
+  occupancyCurrent: number;
+  occupancyMax: number;
+  status: 'Active' | 'Delayed' | 'Maintenance' | 'Standby';
+  healthScore?: number;
+  nextInspection?: string;
+  lastUpdated?: string | Date;
+}
+
+const INITIAL_VEHICLES: VehicleRecord[] = [
+  {
+    vehicleId: 'TN-0821',
+    routeId: 'Route 42',
+    routeName: 'Line 42 Eastbound (Central to University)',
+    transportType: 'Bus',
+    driverName: 'Saran Diya',
+    driverId: 'DRV-401',
+    speed: 42,
+    occupancyCurrent: 36,
+    occupancyMax: 50,
+    status: 'Active',
+    healthScore: 96,
+    nextInspection: '18 Oct 2026',
+  },
+  {
+    vehicleId: 'TN-0824',
+    routeId: 'Route 42',
+    routeName: 'Line 42 Eastbound (Market St to Malabe)',
+    transportType: 'Bus',
+    driverName: 'Kavithushan B.',
+    driverId: 'DRV-102',
+    speed: 18,
+    occupancyCurrent: 48,
+    occupancyMax: 50,
+    status: 'Delayed',
+    healthScore: 88,
+    nextInspection: '14 Oct 2026',
+  },
+  {
+    vehicleId: 'TN-0830',
+    routeId: 'Route 18',
+    routeName: 'Route 18 Express Train',
+    transportType: 'Train',
+    driverName: 'Anura Bandara',
+    driverId: 'DRV-809',
+    speed: 65,
+    occupancyCurrent: 120,
+    occupancyMax: 200,
+    status: 'Active',
+    healthScore: 99,
+    nextInspection: '02 Nov 2026',
+  },
+  {
+    vehicleId: 'TN-0842',
+    routeId: 'Route 105',
+    routeName: 'Route 105 BRT Bus',
+    transportType: 'Bus',
+    driverName: 'Nimal Perera',
+    driverId: 'DRV-304',
+    speed: 0,
+    occupancyCurrent: 0,
+    occupancyMax: 50,
+    status: 'Maintenance',
+    healthScore: 62,
+    nextInspection: 'Immediate Inspection',
+  },
+  {
+    vehicleId: 'TN-0855',
+    routeId: 'Route 42',
+    routeName: 'Line 42 Westbound',
+    transportType: 'Bus',
+    driverName: 'Kamal Silva',
+    driverId: 'DRV-220',
+    speed: 38,
+    occupancyCurrent: 24,
+    occupancyMax: 50,
+    status: 'Active',
+    healthScore: 94,
+    nextInspection: '24 Oct 2026',
+  },
+];
+
+export default function VehicleManagementScreen() {
+  const router = useRouter();
+  const [vehicles, setVehicles] = useState<VehicleRecord[]>(INITIAL_VEHICLES);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterChip, setFilterChip] = useState('All');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Modals state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showHealthModal, setShowHealthModal] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<VehicleRecord | null>(null);
+
+  // Form state for Add/Edit
+  const [formId, setFormId] = useState('');
+  const [formType, setFormType] = useState<'Bus' | 'Train'>('Bus');
+  const [formRouteId, setFormRouteId] = useState('Route 42');
+  const [formRouteName, setFormRouteName] = useState('Line 42 Eastbound');
+  const [formDriver, setFormDriver] = useState('');
+  const [formCapacity, setFormCapacity] = useState('50');
+  const [formStatus, setFormStatus] = useState<'Active' | 'Delayed' | 'Maintenance' | 'Standby'>('Active');
+
+  // Load from backend if available
+  useEffect(() => {
+    fetchVehicles();
+  }, []);
+
+  const fetchVehicles = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch('http://localhost:5000/api/admin/fleet/vehicles');
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.vehicles && Array.isArray(data.vehicles) && data.vehicles.length > 0) {
+          // Merge with health scores
+          const merged = data.vehicles.map((v: any, index: number) => ({
+            ...v,
+            healthScore: v.healthScore ?? (v.status === 'Maintenance' ? 64 : 92 + (index % 7)),
+            nextInspection: v.nextInspection ?? (v.status === 'Maintenance' ? 'Immediate Inspection' : `${15 + index} Oct 2026`),
+          }));
+          setVehicles(merged);
+        }
+      }
+    } catch {
+      // Offline fallback: keep INITIAL_VEHICLES
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Filter logic
+  const filteredVehicles = vehicles.filter((v) => {
+    const matchesSearch =
+      v.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.driverName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.routeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.routeId.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (filterChip === 'All') return true;
+    if (filterChip === 'Buses') return v.transportType === 'Bus';
+    if (filterChip === 'Trains') return v.transportType === 'Train';
+    if (filterChip === 'Active') return v.status === 'Active';
+    if (filterChip === 'Delayed') return v.status === 'Delayed';
+    if (filterChip === 'Maintenance') return v.status === 'Maintenance';
+    return true;
+  });
+
+  // Metrics counts
+  const totalCount = vehicles.length;
+  const activeCount = vehicles.filter((v) => v.status === 'Active').length;
+  const delayedCount = vehicles.filter((v) => v.status === 'Delayed').length;
+  const maintCount = vehicles.filter((v) => v.status === 'Maintenance').length;
+
+  // Handlers
+  const handleOpenAdd = () => {
+    const nextNum = Math.floor(1000 + Math.random() * 9000);
+    setFormId(`TN-${nextNum}`);
+    setFormType('Bus');
+    setFormRouteId('Route 42');
+    setFormRouteName('Line 42 Eastbound');
+    setFormDriver('New Operator');
+    setFormCapacity('50');
+    setFormStatus('Active');
+    setShowAddModal(true);
+  };
+
+  const handleSaveAdd = async () => {
+    if (!formId.trim() || !formDriver.trim()) {
+      Alert.alert('Validation Error', 'Vehicle ID and Driver Name are required.');
+      return;
+    }
+    const newRecord: VehicleRecord = {
+      vehicleId: formId.trim().toUpperCase(),
+      routeId: formRouteId.trim(),
+      routeName: formRouteName.trim() || `${formRouteId.trim()} Main Line`,
+      transportType: formType,
+      driverName: formDriver.trim(),
+      driverId: `DRV-${Math.floor(100 + Math.random() * 900)}`,
+      speed: 0,
+      occupancyCurrent: 0,
+      occupancyMax: parseInt(formCapacity) || (formType === 'Train' ? 200 : 50),
+      status: formStatus,
+      healthScore: 100,
+      nextInspection: '30 Oct 2026',
+      lastUpdated: new Date(),
+    };
+
+    // Optimistic UI update
+    setVehicles((prev) => [newRecord, ...prev]);
+    setShowAddModal(false);
+
+    try {
+      await fetch('http://localhost:5000/api/admin/fleet/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRecord),
+      });
+    } catch {
+      // Offline mode silent persist
+    }
+  };
+
+  const handleOpenEdit = (v: VehicleRecord) => {
+    setSelectedVehicle(v);
+    setFormId(v.vehicleId);
+    setFormType(v.transportType);
+    setFormRouteId(v.routeId);
+    setFormRouteName(v.routeName);
+    setFormDriver(v.driverName);
+    setFormCapacity(String(v.occupancyMax));
+    setFormStatus(v.status);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedVehicle) return;
+    const updated: VehicleRecord = {
+      ...selectedVehicle,
+      routeName: formRouteName.trim(),
+      routeId: formRouteId.trim(),
+      driverName: formDriver.trim(),
+      occupancyMax: parseInt(formCapacity) || selectedVehicle.occupancyMax,
+      status: formStatus,
+      transportType: formType,
+    };
+
+    setVehicles((prev) =>
+      prev.map((v) => (v.vehicleId === selectedVehicle.vehicleId ? updated : v))
+    );
+    setShowEditModal(false);
+
+    try {
+      await fetch('http://localhost:5000/api/admin/fleet/vehicles/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch {}
+  };
+
+  const handleOpenStatus = (v: VehicleRecord) => {
+    setSelectedVehicle(v);
+    setShowStatusModal(true);
+  };
+
+  const handleQuickStatusChange = async (
+    newStatus: 'Active' | 'Delayed' | 'Maintenance' | 'Standby'
+  ) => {
+    if (!selectedVehicle) return;
+    const updated: VehicleRecord = {
+      ...selectedVehicle,
+      status: newStatus,
+      speed: newStatus === 'Maintenance' || newStatus === 'Standby' ? 0 : selectedVehicle.speed,
+    };
+
+    setVehicles((prev) =>
+      prev.map((v) => (v.vehicleId === selectedVehicle.vehicleId ? updated : v))
+    );
+    setShowStatusModal(false);
+
+    try {
+      await fetch('http://localhost:5000/api/admin/fleet/vehicles/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch {}
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedVehicle) return;
+    const targetId = selectedVehicle.vehicleId;
+    setVehicles((prev) => prev.filter((v) => v.vehicleId !== targetId));
+    setShowDeleteModal(false);
+
+    try {
+      await fetch('http://localhost:5000/api/admin/fleet/vehicles/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: targetId }),
+      });
+    } catch {}
+  };
+
+  const handleOpenHealth = (v: VehicleRecord) => {
+    setSelectedVehicle(v);
+    setShowHealthModal(true);
+  };
+
+  const getStatusColor = (st: string) => {
+    switch (st) {
+      case 'Active':
+        return '#10b981';
+      case 'Delayed':
+        return '#f59e0b';
+      case 'Maintenance':
+        return '#f43f5e';
+      case 'Standby':
+        return '#0ea5e9';
+      default:
+        return '#94a3b8';
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Top Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerSubtitle}>Member 4 — Fleet Operations</Text>
+          <Text style={styles.headerTitle}>Vehicle Management</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={handleOpenAdd}
+          accessibilityLabel="Add New Vehicle to Fleet"
+        >
+          <Plus size={18} color="#fff" />
+          <Text style={styles.addButtonText}>Add Vehicle</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 4-Stat Operational Ribbon */}
+      <View style={styles.ribbonContainer}>
+        <View style={styles.ribbonCard}>
+          <Text style={styles.ribbonLabel}>Total Fleet</Text>
+          <Text style={[styles.ribbonVal, { color: '#0ea5e9' }]}>{totalCount}</Text>
+        </View>
+        <View style={styles.ribbonCard}>
+          <Text style={styles.ribbonLabel}>Active</Text>
+          <Text style={[styles.ribbonVal, { color: '#10b981' }]}>{activeCount}</Text>
+        </View>
+        <View style={styles.ribbonCard}>
+          <Text style={styles.ribbonLabel}>Delayed</Text>
+          <Text style={[styles.ribbonVal, { color: '#f59e0b' }]}>{delayedCount}</Text>
+        </View>
+        <View style={styles.ribbonCard}>
+          <Text style={styles.ribbonLabel}>Service</Text>
+          <Text style={[styles.ribbonVal, { color: '#f43f5e' }]}>{maintCount}</Text>
+        </View>
+      </View>
+
+      {/* Search Input Bar */}
+      <View style={styles.searchBar}>
+        <Search size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by Vehicle ID, driver, or route..."
+          placeholderTextColor="#64748b"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <X size={16} color="#94a3b8" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+        contentContainerStyle={styles.chipRow}
+      >
+        {['All', 'Buses', 'Trains', 'Active', 'Delayed', 'Maintenance'].map((chip) => (
+          <TouchableOpacity
+            key={chip}
+            style={[styles.chip, filterChip === chip && styles.chipActive]}
+            onPress={() => setFilterChip(chip)}
+          >
+            <Text style={[styles.chipText, filterChip === chip && styles.chipTextActive]}>
+              {chip === 'Buses' ? '🚌 Buses' : chip === 'Trains' ? '🚆 Trains' : chip}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Vehicle Cards Feed */}
+      <ScrollView style={styles.feedScroll} contentContainerStyle={{ paddingBottom: 28 }}>
+        {filteredVehicles.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Bus size={42} color="#475569" />
+            <Text style={styles.emptyTitle}>No matching vehicles found</Text>
+            <Text style={styles.emptySubtext}>
+              Try adjusting your search query or filter selection.
+            </Text>
+            <TouchableOpacity style={styles.emptyResetBtn} onPress={() => { setSearchQuery(''); setFilterChip('All'); }}>
+              <Text style={styles.emptyResetText}>Reset All Filters</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          filteredVehicles.map((v) => {
+            const statusColor = getStatusColor(v.status);
+            const occupancyPct = Math.min(100, Math.round((v.occupancyCurrent / v.occupancyMax) * 100));
+
+            return (
+              <View key={v.vehicleId} style={styles.vehicleCard}>
+                {/* Card Header */}
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardIdGroup}>
+                    <View style={[styles.typeIconContainer, { backgroundColor: v.transportType === 'Train' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(14, 165, 233, 0.2)' }]}>
+                      {v.transportType === 'Train' ? (
+                        <Train size={18} color="#818cf8" />
+                      ) : (
+                        <Bus size={18} color="#0ea5e9" />
+                      )}
+                    </View>
+                    <View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.cardIdText}>#{v.vehicleId}</Text>
+                        <View style={styles.typeTag}>
+                          <Text style={styles.typeTagText}>{v.transportType}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.cardRouteText}>{v.routeName}</Text>
+                    </View>
+                  </View>
+
+                  {/* Status Badge with Quick Click */}
+                  <TouchableOpacity
+                    style={[styles.statusBadge, { backgroundColor: `${statusColor}22`, borderColor: `${statusColor}55` }]}
+                    onPress={() => handleOpenStatus(v)}
+                    accessibilityLabel={`Change status for ${v.vehicleId}. Current: ${v.status}`}
+                  >
+                    <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[styles.statusBadgeText, { color: statusColor }]}>{v.status}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Telemetry & Driver Specs Row */}
+                <View style={styles.specsRow}>
+                  <View style={styles.specItem}>
+                    <Users size={14} color="#94a3b8" />
+                    <Text style={styles.specLabel}>Driver:</Text>
+                    <Text style={styles.specVal} numberOfLines={1}>{v.driverName}</Text>
+                  </View>
+                  <View style={styles.specItem}>
+                    <Gauge size={14} color="#94a3b8" />
+                    <Text style={styles.specLabel}>Speed:</Text>
+                    <Text style={styles.specVal}>{v.speed} km/h</Text>
+                  </View>
+                </View>
+
+                {/* Occupancy Progress Bar */}
+                <View style={styles.occupancyContainer}>
+                  <View style={styles.occupancyHeader}>
+                    <Text style={styles.occupancyTitle}>Passenger Load:</Text>
+                    <Text style={styles.occupancyCount}>
+                      {v.occupancyCurrent} / {v.occupancyMax} seats ({occupancyPct}%)
+                    </Text>
+                  </View>
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressBar,
+                        {
+                          width: `${occupancyPct}%`,
+                          backgroundColor: occupancyPct > 85 ? '#f43f5e' : occupancyPct > 60 ? '#f59e0b' : '#10b981',
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                {/* Health & Inspection Pill */}
+                <TouchableOpacity
+                  style={styles.healthRow}
+                  onPress={() => handleOpenHealth(v)}
+                  accessibilityLabel="View vehicle health diagnostics"
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Wrench size={13} color="#38bdf8" style={{ marginRight: 6 }} />
+                    <Text style={styles.healthText}>
+                      Health: <Text style={{ color: (v.healthScore ?? 90) < 70 ? '#f43f5e' : '#38bdf8', fontWeight: '700' }}>{v.healthScore ?? 90}%</Text> • Next: {v.nextInspection ?? '24 Oct'}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.healthDetailLink}>Inspect</Text>
+                    <ChevronRight size={13} color="#38bdf8" />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Smart Disruption Alert Quick Bridge (HCI Cross-Feature Synergy) */}
+                {(v.status === 'Delayed' || v.status === 'Maintenance') && (
+                  <TouchableOpacity
+                    style={styles.alertPromptBtn}
+                    onPress={() => router.push('/admin/alerts')}
+                    accessibilityLabel="Broadcast Disruption alert for this route"
+                  >
+                    <AlertTriangle size={14} color="#f59e0b" style={{ marginRight: 6 }} />
+                    <Text style={styles.alertPromptText}>
+                      Affected route delay detected. Broadcast Passenger Alert →
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Action Buttons Row */}
+                <View style={styles.actionsBar}>
+                  <TouchableOpacity
+                    style={styles.actionBtnSecondary}
+                    onPress={() => router.push('/admin/fleet-radar')}
+                  >
+                    <Radio size={14} color="#0ea5e9" style={{ marginRight: 4 }} />
+                    <Text style={styles.actionBtnSecondaryText}>Radar Map</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionBtnSecondary}
+                    onPress={() => handleOpenEdit(v)}
+                  >
+                    <Edit3 size={14} color="#94a3b8" style={{ marginRight: 4 }} />
+                    <Text style={styles.actionBtnSecondaryText}>Edit Specs</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtnSecondary, { borderColor: 'rgba(244, 63, 94, 0.25)' }]}
+                    onPress={() => {
+                      setSelectedVehicle(v);
+                      setShowDeleteModal(true);
+                    }}
+                  >
+                    <Trash2 size={14} color="#f43f5e" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </ScrollView>
+
+      {/* ================= MODAL 1: ADD NEW VEHICLE ================= */}
+      <Modal visible={showAddModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalSub}>Fleet Registration</Text>
+                <Text style={styles.modalTitle}>Add New Fleet Vehicle</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <X size={22} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }}>
+              <Text style={styles.inputLabel}>Vehicle ID / Code</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={formId}
+                onChangeText={setFormId}
+                placeholder="e.g. TN-0865"
+                placeholderTextColor="#64748b"
+              />
+
+              <Text style={styles.inputLabel}>Transport Mode</Text>
+              <View style={styles.segmentedRow}>
+                <TouchableOpacity
+                  style={[styles.segmentBtn, formType === 'Bus' && styles.segmentBtnActive]}
+                  onPress={() => {
+                    setFormType('Bus');
+                    setFormCapacity('50');
+                  }}
+                >
+                  <Bus size={16} color={formType === 'Bus' ? '#fff' : '#94a3b8'} style={{ marginRight: 6 }} />
+                  <Text style={[styles.segmentBtnText, formType === 'Bus' && styles.segmentBtnTextActive]}>Bus / BRT</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.segmentBtn, formType === 'Train' && styles.segmentBtnActive]}
+                  onPress={() => {
+                    setFormType('Train');
+                    setFormCapacity('200');
+                  }}
+                >
+                  <Train size={16} color={formType === 'Train' ? '#fff' : '#94a3b8'} style={{ marginRight: 6 }} />
+                  <Text style={[styles.segmentBtnText, formType === 'Train' && styles.segmentBtnTextActive]}>Train Service</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.inputLabel}>Assigned Transit Route</Text>
+              <View style={styles.segmentedRow}>
+                {['Route 42', 'Route 18', 'Route 105'].map((r) => (
+                  <TouchableOpacity
+                    key={r}
+                    style={[styles.segmentBtn, formRouteId === r && styles.segmentBtnActive]}
+                    onPress={() => {
+                      setFormRouteId(r);
+                      setFormRouteName(
+                        r === 'Route 42' ? 'Line 42 Eastbound' : r === 'Route 18' ? 'Route 18 Express' : 'Route 105 BRT'
+                      );
+                    }}
+                  >
+                    <Text style={[styles.segmentBtnText, formRouteId === r && styles.segmentBtnTextActive]}>{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>Assigned Operator / Driver</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={formDriver}
+                onChangeText={setFormDriver}
+                placeholder="e.g. Saran Diya"
+                placeholderTextColor="#64748b"
+              />
+
+              <Text style={styles.inputLabel}>Maximum Seating Capacity</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={formCapacity}
+                onChangeText={setFormCapacity}
+                keyboardType="numeric"
+                placeholder="e.g. 50"
+                placeholderTextColor="#64748b"
+              />
+
+              <Text style={styles.inputLabel}>Initial Status</Text>
+              <View style={styles.segmentedRow}>
+                {(['Active', 'Standby', 'Maintenance'] as const).map((st) => (
+                  <TouchableOpacity
+                    key={st}
+                    style={[styles.segmentBtn, formStatus === st && styles.segmentBtnActive]}
+                    onPress={() => setFormStatus(st)}
+                  >
+                    <Text style={[styles.segmentBtnText, formStatus === st && styles.segmentBtnTextActive]}>{st}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddModal(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleSaveAdd}>
+                <CheckCircle2 size={16} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.confirmBtnText}>Save Vehicle</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ================= MODAL 2: EDIT VEHICLE SPECS ================= */}
+      <Modal visible={showEditModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalSub}>Update Vehicle Specs</Text>
+                <Text style={styles.modalTitle}>Edit #{selectedVehicle?.vehicleId}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <X size={22} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }}>
+              <Text style={styles.inputLabel}>Route Display Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={formRouteName}
+                onChangeText={setFormRouteName}
+              />
+
+              <Text style={styles.inputLabel}>Assigned Driver</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={formDriver}
+                onChangeText={setFormDriver}
+              />
+
+              <Text style={styles.inputLabel}>Max Capacity (Seats)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={formCapacity}
+                onChangeText={setFormCapacity}
+                keyboardType="numeric"
+              />
+
+              <Text style={styles.inputLabel}>Current Status</Text>
+              <View style={styles.segmentedRow}>
+                {(['Active', 'Delayed', 'Maintenance', 'Standby'] as const).map((st) => (
+                  <TouchableOpacity
+                    key={st}
+                    style={[styles.segmentBtn, formStatus === st && styles.segmentBtnActive]}
+                    onPress={() => setFormStatus(st)}
+                  >
+                    <Text style={[styles.segmentBtnText, formStatus === st && styles.segmentBtnTextActive]}>{st}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowEditModal(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleSaveEdit}>
+                <CheckCircle2 size={16} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.confirmBtnText}>Update Specs</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ================= MODAL 3: QUICK STATUS SWITCHER ================= */}
+      <Modal visible={showStatusModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalSub}>Quick Operational Switch</Text>
+                <Text style={styles.modalTitle}>Set Status: #{selectedVehicle?.vehicleId}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowStatusModal(false)}>
+                <X size={22} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 14 }}>
+              Instantly toggle the operational readiness of this fleet unit across the system:
+            </Text>
+
+            {[
+              { id: 'Active', label: 'Active In-Service', desc: 'Operating scheduled line normally', color: '#10b981' },
+              { id: 'Delayed', label: 'Traffic / Schedule Delay', desc: 'Running behind schedule, telemetry active', color: '#f59e0b' },
+              { id: 'Maintenance', label: 'Mechanical Maintenance', desc: 'Pulled from route for depot inspection', color: '#f43f5e' },
+              { id: 'Standby', label: 'Depot Standby Reserve', desc: 'Ready for emergency backup dispatch', color: '#0ea5e9' },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.id}
+                style={[
+                  styles.statusOptionCard,
+                  selectedVehicle?.status === option.id && { borderColor: option.color, backgroundColor: `${option.color}15` },
+                ]}
+                onPress={() => handleQuickStatusChange(option.id as any)}
+              >
+                <View style={[styles.statusDot, { backgroundColor: option.color }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.statusOptionTitle, { color: option.color }]}>{option.label}</Text>
+                  <Text style={styles.statusOptionDesc}>{option.desc}</Text>
+                </View>
+                {selectedVehicle?.status === option.id && <CheckCircle2 size={18} color={option.color} />}
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity style={[styles.cancelBtn, { marginTop: 12 }]} onPress={() => setShowStatusModal(false)}>
+              <Text style={styles.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ================= MODAL 4: CONFIRM DECOMMISSION ================= */}
+      <Modal visible={showDeleteModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { borderColor: '#f43f5e' }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ShieldAlert size={22} color="#f43f5e" style={{ marginRight: 8 }} />
+                <Text style={[styles.modalTitle, { color: '#f43f5e' }]}>Decommission Vehicle</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowDeleteModal(false)}>
+                <X size={22} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ color: '#e2e8f0', fontSize: 14, marginVertical: 14, lineHeight: 20 }}>
+              Are you sure you want to remove <Text style={{ fontWeight: '700', color: '#fff' }}>#{selectedVehicle?.vehicleId}</Text> from the active TransitPlus fleet inventory?
+            </Text>
+            <Text style={{ color: '#94a3b8', fontSize: 12, marginBottom: 18 }}>
+              This unit will be deregistered from live GPS broadcasts and removed from operator duty rosters.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowDeleteModal(false)}>
+                <Text style={styles.cancelBtnText}>Keep Vehicle</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: '#f43f5e' }]} onPress={handleConfirmDelete}>
+                <Trash2 size={16} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.confirmBtnText}>Confirm Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ================= MODAL 5: HEALTH & INSPECTION LOG ================= */}
+      <Modal visible={showHealthModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalSub}>Diagnostics & Safety</Text>
+                <Text style={styles.modalTitle}>Health Log: #{selectedVehicle?.vehicleId}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowHealthModal(false)}>
+                <X size={22} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.healthOverviewBanner}>
+              <View>
+                <Text style={styles.healthScoreBig}>{selectedVehicle?.healthScore ?? 94}%</Text>
+                <Text style={styles.healthScoreLabel}>Overall Safety Rating</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.healthInspectionBadge}>
+                  {selectedVehicle?.nextInspection ?? '24 Oct 2026'}
+                </Text>
+                <Text style={styles.healthScoreLabel}>Next Scheduled Service</Text>
+              </View>
+            </View>
+
+            <Text style={[styles.inputLabel, { marginTop: 12 }]}>Safety Checklist Diagnostics</Text>
+            {[
+              { system: 'Pneumatic Braking System', status: 'Optimal (Pressure 8.2 bar)', ok: true },
+              { system: 'Engine & Transmission Sensors', status: selectedVehicle?.status === 'Maintenance' ? 'Warning: Fault code E-41' : 'Normal operating temperature', ok: selectedVehicle?.status !== 'Maintenance' },
+              { system: 'Passenger Door Sensors & Ramp', status: 'Passed calibration', ok: true },
+              { system: 'Tire Pressure & Tread Depth', status: '8.5 mm tread (Compliant)', ok: true },
+              { system: 'Air Conditioning / Ventilation', status: 'Cooling at 22°C', ok: true },
+            ].map((chk, idx) => (
+              <View key={idx} style={styles.checkItem}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.checkTitle}>{chk.system}</Text>
+                  <Text style={styles.checkSub}>{chk.status}</Text>
+                </View>
+                {chk.ok ? (
+                  <CheckCircle2 size={18} color="#10b981" />
+                ) : (
+                  <AlertTriangle size={18} color="#f43f5e" />
+                )}
+              </View>
+            ))}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.cancelBtn, { flex: 1 }]}
+                onPress={() => setShowHealthModal(false)}
+              >
+                <Text style={styles.cancelBtnText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmBtn, { flex: 1.2 }]}
+                onPress={() => {
+                  Alert.alert('Service Scheduled', `Depot maintenance appointment reserved for #${selectedVehicle?.vehicleId}.`);
+                  setShowHealthModal(false);
+                }}
+              >
+                <Clock size={16} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.confirmBtnText}>Schedule Depot Service</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  headerSubtitle: {
+    fontSize: 11,
+    color: '#0ea5e9',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: -0.4,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+    marginLeft: 4,
+  },
+  ribbonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  ribbonCard: {
+    flex: 1,
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginHorizontal: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  ribbonLabel: {
+    fontSize: 10,
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  ribbonVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 13,
+    padding: 0,
+  },
+  chipScroll: {
+    maxHeight: 38,
+    marginBottom: 12,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 10,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(30, 41, 59, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  chipActive: {
+    backgroundColor: '#0ea5e9',
+    borderColor: '#38bdf8',
+  },
+  chipText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chipTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  feedScroll: {
+    flex: 1,
+  },
+  vehicleCard: {
+    backgroundColor: 'rgba(30, 41, 59, 0.75)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  cardIdGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  typeIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  cardIdText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    marginRight: 6,
+  },
+  typeTag: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  typeTagText: {
+    color: '#cbd5e1',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  cardRouteText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 1,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 5,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  specsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  specItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  specLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    marginLeft: 4,
+    marginRight: 4,
+  },
+  specVal: {
+    color: '#e2e8f0',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  occupancyContainer: {
+    marginBottom: 10,
+  },
+  occupancyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  occupancyTitle: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
+  },
+  occupancyCount: {
+    fontSize: 11,
+    color: '#cbd5e1',
+    fontWeight: '700',
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  healthRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(14, 165, 233, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(14, 165, 233, 0.2)',
+    marginBottom: 10,
+  },
+  healthText: {
+    fontSize: 11,
+    color: '#e0f2fe',
+  },
+  healthDetailLink: {
+    fontSize: 11,
+    color: '#38bdf8',
+    fontWeight: '700',
+    marginRight: 2,
+  },
+  alertPromptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    marginBottom: 10,
+  },
+  alertPromptText: {
+    color: '#f59e0b',
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+  },
+  actionsBar: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  actionBtnSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    paddingVertical: 8,
+  },
+  actionBtnSecondaryText: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+  },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 12,
+  },
+  emptySubtext: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyResetBtn: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#0ea5e9',
+    borderRadius: 8,
+  },
+  emptyResetText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  // Modals styling
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContent: {
+    width: '100%',
+    backgroundColor: '#1e293b',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  modalSub: {
+    fontSize: 11,
+    color: '#0ea5e9',
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  modalTitle: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  inputLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  modalInput: {
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    color: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+  },
+  segmentedRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    paddingVertical: 8,
+  },
+  segmentBtnActive: {
+    backgroundColor: '#0284c7',
+    borderColor: '#38bdf8',
+  },
+  segmentBtnText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  segmentBtnTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 20,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  cancelBtnText: {
+    color: '#cbd5e1',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  confirmBtn: {
+    flex: 1.5,
+    flexDirection: 'row',
+    paddingVertical: 11,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0284c7',
+  },
+  confirmBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  statusOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  statusOptionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  statusOptionDesc: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  healthOverviewBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(14, 165, 233, 0.12)',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(14, 165, 233, 0.25)',
+    marginVertical: 10,
+  },
+  healthScoreBig: {
+    color: '#38bdf8',
+    fontSize: 28,
+    fontWeight: '900',
+  },
+  healthScoreLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  healthInspectionBadge: {
+    color: '#10b981',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  checkItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  checkTitle: {
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  checkSub: {
+    color: '#94a3b8',
+    fontSize: 10,
+    marginTop: 1,
+  },
+});

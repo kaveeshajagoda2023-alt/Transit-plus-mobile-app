@@ -28,7 +28,7 @@ let disruptionAlerts = [
 const server = http.createServer((req, res) => {
   // Enable CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
@@ -78,10 +78,99 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 3. Live Fleet Radar & Telemetry API (US08)
+  // 3. Live Fleet Radar & Telemetry API (US08) & Vehicle Inventory Management
   if (pathname === '/api/admin/fleet/vehicles' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, vehicles }));
+    return;
+  }
+
+  // 3b. Add New Vehicle to Fleet
+  if (pathname === '/api/admin/fleet/vehicles' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body || '{}');
+        const newVehicle = {
+          vehicleId: data.vehicleId || `TN-${Math.floor(1000 + Math.random() * 9000)}`,
+          routeId: data.routeId || 'Route 42',
+          routeName: data.routeName || `${data.routeId || 'Route 42'} Transit Line`,
+          transportType: data.transportType || 'Bus',
+          driverName: data.driverName || 'Assigned Driver',
+          driverId: data.driverId || `DRV-${Math.floor(100 + Math.random() * 900)}`,
+          speed: parseInt(data.speed) || 0,
+          location: data.location || { lat: 6.9271, lng: 79.8612 },
+          occupancyCurrent: parseInt(data.occupancyCurrent) || 0,
+          occupancyMax: parseInt(data.occupancyMax) || (data.transportType === 'Train' ? 200 : 50),
+          status: data.status || 'Active',
+          lastUpdated: new Date()
+        };
+        vehicles.unshift(newVehicle);
+        console.log(`🚌 [FLEET MANAGEMENT] Added vehicle: ${newVehicle.vehicleId} (${newVehicle.transportType})`);
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Vehicle registered successfully.', vehicle: newVehicle }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid JSON payload' }));
+      }
+    });
+    return;
+  }
+
+  // 3c. Update Vehicle Details or Status
+  if ((pathname.startsWith('/api/admin/fleet/vehicles/') || pathname === '/api/admin/fleet/vehicles/update') && (req.method === 'PUT' || req.method === 'POST')) {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body || '{}');
+        const targetId = data.vehicleId || pathname.split('/').pop();
+        const index = vehicles.findIndex(v => v.vehicleId === targetId);
+        if (index === -1) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Vehicle not found' }));
+          return;
+        }
+        vehicles[index] = {
+          ...vehicles[index],
+          ...data,
+          lastUpdated: new Date()
+        };
+        console.log(`🔧 [FLEET MANAGEMENT] Updated vehicle: ${targetId} -> Status: ${vehicles[index].status}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Vehicle updated.', vehicle: vehicles[index] }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid JSON payload' }));
+      }
+    });
+    return;
+  }
+
+  // 3d. Delete / Decommission Vehicle from Fleet
+  if ((pathname.startsWith('/api/admin/fleet/vehicles/') || pathname === '/api/admin/fleet/vehicles/delete') && (req.method === 'DELETE' || req.method === 'POST')) {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = body ? JSON.parse(body) : {};
+        const targetId = data.vehicleId || pathname.split('/').pop();
+        const initialLen = vehicles.length;
+        vehicles = vehicles.filter(v => v.vehicleId !== targetId);
+        if (vehicles.length === initialLen) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Vehicle not found' }));
+          return;
+        }
+        console.log(`🗑️ [FLEET MANAGEMENT] Decommissioned vehicle: ${targetId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Vehicle decommissioned from fleet.' }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Error processing request' }));
+      }
+    });
     return;
   }
 

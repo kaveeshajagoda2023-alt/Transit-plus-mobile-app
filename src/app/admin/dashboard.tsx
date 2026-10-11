@@ -15,14 +15,18 @@ export default function DashboardOverviewScreen() {
 
       {/* 2x2 Operational Metrics Grid */}
       <View style={styles.metricsGrid}>
-        <View style={styles.metricCard}>
+        <TouchableOpacity 
+          style={styles.metricCard}
+          onPress={() => router.push('/admin/vehicles')}
+          accessibilityLabel="View Fleet Vehicle Inventory"
+        >
           <View style={styles.metricHeader}>
             <Text style={styles.metricLabel}>Active Fleet</Text>
             <Bus size={18} color="#0ea5e9" />
           </View>
           <Text style={styles.metricVal}>142</Text>
-          <Text style={styles.metricSubtext}>↑ 94.2% On-Time</Text>
-        </View>
+          <Text style={styles.metricSubtext}>Manage Vehicles →</Text>
+        </TouchableOpacity>
 
         <View style={[styles.metricCard, styles.emeraldCard]}>
           <View style={styles.metricHeader}>
@@ -58,6 +62,20 @@ export default function DashboardOverviewScreen() {
       {/* Quick Action Cards */}
       <TouchableOpacity 
         style={styles.actionCard} 
+        onPress={() => router.push('/admin/vehicles')}
+      >
+        <View style={[styles.actionIconContainer, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+          <Bus size={22} color="#10b981" />
+        </View>
+        <View style={styles.actionTextContainer}>
+          <Text style={styles.actionTitle}>Vehicle & Fleet Management</Text>
+          <Text style={styles.actionSubtitle}>Add, edit, assign drivers, schedule service & toggle status</Text>
+        </View>
+        <ChevronRight size={20} color="#94a3b8" />
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.actionCard} 
         onPress={() => router.push('/admin/fleet-radar')}
       >
         <View style={[styles.actionIconContainer, { backgroundColor: 'rgba(14, 165, 233, 0.15)' }]}>
@@ -65,7 +83,7 @@ export default function DashboardOverviewScreen() {
         </View>
         <View style={styles.actionTextContainer}>
           <Text style={styles.actionTitle}>Live Fleet Telemetry Radar</Text>
-          <Text style={styles.actionSubtitle}>Track 45 active buses/trains with pull-up bottom sheet</Text>
+          <Text style={styles.actionSubtitle}>Track active buses/trains with pull-up bottom sheet</Text>
         </View>
         <ChevronRight size={20} color="#94a3b8" />
       </TouchableOpacity>

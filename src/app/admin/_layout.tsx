@@ -1,14 +1,16 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import AdminHeader from '../../components/admin/AdminHeader';
-import { LayoutDashboard, Radio, ClipboardList, AlertTriangle, UserCheck } from 'lucide-react-native';
+import { LayoutDashboard, Bus, Radio, ClipboardList, AlertTriangle, UserCheck } from 'lucide-react-native';
 import React from 'react';
 
 export default function AdminLayout() {
+  const pathname = usePathname();
+  const isLogin = pathname === '/admin/login';
   return (
     <Tabs
       screenOptions={{
         header: () => <AdminHeader activeAlertsCount={1} />,
-        tabBarStyle: {
+        tabBarStyle: isLogin ? { display: 'none' } : {
           backgroundColor: '#0f172a',
           borderTopWidth: 1,
           borderTopColor: 'rgba(255, 255, 255, 0.1)',
@@ -19,7 +21,7 @@ export default function AdminLayout() {
         tabBarActiveTintColor: '#0ea5e9',
         tabBarInactiveTintColor: '#94a3b8',
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '600',
         },
       }}
@@ -32,9 +34,16 @@ export default function AdminLayout() {
         }}
       />
       <Tabs.Screen
+        name="vehicles"
+        options={{
+          title: 'Vehicles',
+          tabBarIcon: ({ color }) => <Bus size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="fleet-radar"
         options={{
-          title: 'Fleet Radar',
+          title: 'Radar',
           tabBarIcon: ({ color }) => <Radio size={20} color={color} />,
         }}
       />
