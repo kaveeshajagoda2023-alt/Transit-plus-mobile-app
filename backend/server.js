@@ -208,7 +208,7 @@ const server = http.createServer((req, res) => {
         rerouteInstruction: data.rerouteInstruction || 'Follow station operator instructions.',
         broadcastedAt: new Date(),
         broadcastBy: 'Admin (IT23762572)',
-        status: 'Active'
+        status: data.status || 'Active'
       };
       disruptionAlerts.unshift(newAlert);
 
@@ -216,6 +216,62 @@ const server = http.createServer((req, res) => {
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, message: 'Disruption alert broadcasted.', alert: newAlert }));
+    });
+    return;
+  }
+
+  // 5b. Update Disruption Alert (CRUD 2: Update)
+  if ((pathname.startsWith('/api/admin/disruptions/update') || pathname.match(/\/api\/admin\/disruptions\/ALT-\d+/)) && (req.method === 'PUT' || req.method === 'POST')) {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body || '{}');
+        const targetId = data.alertId || pathname.split('/').pop();
+        const index = disruptionAlerts.findIndex(a => a.alertId === targetId);
+        if (index === -1) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Alert not found' }));
+          return;
+        }
+        disruptionAlerts[index] = {
+          ...disruptionAlerts[index],
+          ...data,
+          lastUpdated: new Date()
+        };
+        console.log(`✏️ [DISRUPTION UPDATE] Updated alert: ${targetId} -> Status: ${disruptionAlerts[index].status}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Disruption alert updated.', alert: disruptionAlerts[index] }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid payload' }));
+      }
+    });
+    return;
+  }
+
+  // 5c. Delete / Withdraw Disruption Alert (CRUD 2: Delete)
+  if ((pathname.startsWith('/api/admin/disruptions/delete') || pathname.match(/\/api\/admin\/disruptions\/ALT-\d+/)) && (req.method === 'DELETE' || req.method === 'POST')) {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = body ? JSON.parse(body) : {};
+        const targetId = data.alertId || pathname.split('/').pop();
+        const initialLen = disruptionAlerts.length;
+        disruptionAlerts = disruptionAlerts.filter(a => a.alertId !== targetId);
+        if (disruptionAlerts.length === initialLen) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Alert not found' }));
+          return;
+        }
+        console.log(`🗑️ [DISRUPTION WITHDRAWN] Withdrew alert: ${targetId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Disruption alert withdrawn from broadcast.' }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Error processing delete' }));
+      }
     });
     return;
   }
