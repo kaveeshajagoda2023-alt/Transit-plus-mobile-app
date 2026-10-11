@@ -10,6 +10,7 @@ import terminalRoutes from './terminalRoutes.js';
 import placesRoutes from './placesRoutes.js';
 import passengerRoutes from './passengerRoutes.js';
 import driverRoutes from './driverRoutes.js';
+import ticketingRoutes from './ticketingRoutes.js';
 
 const apiRouter = Router();
 
@@ -19,6 +20,7 @@ apiRouter.use('/passengers', passengerRoutes);
 apiRouter.use('/drivers', driverRoutes);
 apiRouter.use('/trips', tripRoutes);
 apiRouter.use('/tickets', ticketRoutes);
+apiRouter.use('/ticketing', ticketingRoutes); // Member 2 — passenger ticketing
 apiRouter.use('/operator', operatorRoutes);
 apiRouter.use('/routes', routeRoutes);
 apiRouter.use('/vehicles', vehicleRoutes);

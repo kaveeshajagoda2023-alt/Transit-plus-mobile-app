@@ -8,8 +8,9 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "build": "tsc",
-    "test": "tsx tests/backend.test.ts && tsx tests/crud.test.ts",
-    "test:crud": "tsx tests/crud.test.ts"
+    "test": "tsx tests/backend.test.ts && tsx tests/crud.test.ts && tsx tests/ticketing.test.ts",
+    "test:crud": "tsx tests/crud.test.ts",
+    "test:ticketing": "tsx tests/ticketing.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

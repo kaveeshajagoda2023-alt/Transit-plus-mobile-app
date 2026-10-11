@@ -50,6 +50,12 @@ export default function RootLayout() {
           <Stack.Screen name="passenger/vehicle-tracking" />
           <Stack.Screen name="routes/index" />
           <Stack.Screen name="tickets/index" />
+          {/* Member 2 — Passenger Ticketing */}
+          <Stack.Screen name="tickets/buy" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="tickets/checkout" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="tickets/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="tickets/reschedule" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="tickets/payments" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="alerts/index" />
           <Stack.Screen name="profile/index" />
         </Stack>
