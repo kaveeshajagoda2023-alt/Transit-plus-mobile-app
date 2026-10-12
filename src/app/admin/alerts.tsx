@@ -8,6 +8,7 @@ import {
   ScrollView,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import {
   AlertTriangle,
@@ -25,7 +26,10 @@ import {
   Radio,
   SlidersHorizontal,
   Flame,
+  RefreshCw,
 } from 'lucide-react-native';
+import { getAdminApiUrl } from '@/services/utils/adminApiUrl';
+import { adminDataStorage } from '@/services/storage/adminDataStorage';
 
 export interface DisruptionAlert {
   id: string;
@@ -36,6 +40,8 @@ export interface DisruptionAlert {
   severity: 'Low' | 'Medium' | 'High' | 'Critical';
   rerouteText?: string;
   broadcastAt: string;
+  broadcastBy?: string;
+  source?: 'Driver' | 'Coordinator';
   status: 'Active' | 'Resolved';
 }
 
@@ -93,15 +99,26 @@ export default function DisruptionAlertScreen() {
   const [severity, setSeverity] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('High');
   const [delayMinutes, setDelayMinutes] = useState('15');
   const [rerouteText, setRerouteText] = useState('Follow station supervisor instructions. Reroute via Bypass.');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Load from backend on mount
+  // Load from persistent local storage on mount, then poll backend
   useEffect(() => {
-    fetchAlerts();
+    adminDataStorage.getAlerts(INITIAL_ALERTS).then((saved) => {
+      if (saved && Array.isArray(saved) && saved.length > 0) {
+        setAlerts(saved);
+      }
+      fetchAlerts();
+    });
+    const pollInterval = setInterval(() => {
+      fetchAlerts(true);
+    }, 8000);
+    return () => clearInterval(pollInterval);
   }, []);
 
-  const fetchAlerts = async () => {
+  const fetchAlerts = async (silent = false) => {
     try {
-      const res = await fetch('http://localhost:5000/api/admin/disruptions');
+      if (!silent) setIsRefreshing(true);
+      const res = await fetch(getAdminApiUrl('/api/admin/disruptions'));
       if (res.ok) {
         const data = await res.json();
         if (data?.alerts && Array.isArray(data.alerts) && data.alerts.length > 0) {
@@ -112,13 +129,24 @@ export default function DisruptionAlertScreen() {
             delayMinutes: a.delayMinutes || 15,
             severity: a.severity || 'High',
             rerouteText: a.rerouteInstruction || a.rerouteText || 'Follow detour signage.',
-            broadcastAt: a.broadcastedAt ? new Date(a.broadcastedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just Now',
+            broadcastAt: a.broadcastedAt
+              ? typeof a.broadcastedAt === 'string' && (a.broadcastedAt.includes('AM') || a.broadcastedAt.includes('PM'))
+                ? a.broadcastedAt
+                : new Date(a.broadcastedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'Just Now',
+            broadcastBy: a.broadcastBy || 'Admin Ops',
+            source: a.source || (a.broadcastBy?.includes('Operator') ? 'Driver' : 'Coordinator'),
             status: a.status || 'Active',
           }));
           setAlerts(formatted);
+          adminDataStorage.saveAlerts(formatted);
         }
       }
-    } catch {}
+    } catch {
+      // Offline fallback: keep local alerts
+    } finally {
+      if (!silent) setIsRefreshing(false);
+    }
   };
 
   // Preset Template Helper
@@ -158,14 +186,20 @@ export default function DisruptionAlertScreen() {
       severity,
       rerouteText: rerouteText.trim(),
       broadcastAt: 'Just Now',
+      broadcastBy: 'Admin (IT23762572)',
+      source: 'Coordinator',
       status: 'Active',
     };
 
-    setAlerts((prev) => [newAlert, ...prev]);
+    setAlerts((prev) => {
+      const list = [newAlert, ...prev];
+      adminDataStorage.saveAlerts(list);
+      return list;
+    });
     setShowConfirmModal(false);
 
     try {
-      await fetch('http://localhost:5000/api/admin/disruptions/broadcast', {
+      await fetch(getAdminApiUrl('/api/admin/disruptions/broadcast'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -203,11 +237,15 @@ export default function DisruptionAlertScreen() {
       rerouteText: rerouteText.trim(),
     };
 
-    setAlerts((prev) => prev.map((a) => (a.id === selectedAlert.id ? updated : a)));
+    setAlerts((prev) => {
+      const list = prev.map((a) => (a.id === selectedAlert.id ? updated : a));
+      adminDataStorage.saveAlerts(list);
+      return list;
+    });
     setShowEditModal(false);
 
     try {
-      await fetch('http://localhost:5000/api/admin/disruptions/update', {
+      await fetch(getAdminApiUrl('/api/admin/disruptions/update'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -231,10 +269,14 @@ export default function DisruptionAlertScreen() {
       delayMinutes: nextStatus === 'Resolved' ? 0 : a.delayMinutes || 10,
     };
 
-    setAlerts((prev) => prev.map((item) => (item.id === a.id ? updated : item)));
+    setAlerts((prev) => {
+      const list = prev.map((item) => (item.id === a.id ? updated : item));
+      adminDataStorage.saveAlerts(list);
+      return list;
+    });
 
     try {
-      await fetch('http://localhost:5000/api/admin/disruptions/update', {
+      await fetch(getAdminApiUrl('/api/admin/disruptions/update'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -250,11 +292,15 @@ export default function DisruptionAlertScreen() {
   const handleConfirmDelete = async () => {
     if (!selectedAlert) return;
     const targetId = selectedAlert.id;
-    setAlerts((prev) => prev.filter((a) => a.id !== targetId));
+    setAlerts((prev) => {
+      const list = prev.filter((a) => a.id !== targetId);
+      adminDataStorage.saveAlerts(list);
+      return list;
+    });
     setShowDeleteModal(false);
 
     try {
-      await fetch('http://localhost:5000/api/admin/disruptions/delete', {
+      await fetch(getAdminApiUrl('/api/admin/disruptions/delete'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ alertId: targetId }),
@@ -305,14 +351,28 @@ export default function DisruptionAlertScreen() {
           <Text style={styles.headerSubtitle}>CRUD 2 — Disruption Operations</Text>
           <Text style={styles.headerTitle}>Disruption Alert Hub</Text>
         </View>
-        <TouchableOpacity
-          style={styles.composeButton}
-          onPress={handleOpenCompose}
-          accessibilityLabel="Broadcast New Service Alert"
-        >
-          <Send size={16} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.composeButtonText}>New Broadcast</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            style={styles.refreshIconBtn}
+            onPress={() => fetchAlerts(false)}
+            disabled={isRefreshing}
+            accessibilityLabel="Refresh Alerts"
+          >
+            {isRefreshing ? (
+              <ActivityIndicator size="small" color="#0F2942" />
+            ) : (
+              <RefreshCw size={16} color="#0F2942" />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.composeButton}
+            onPress={handleOpenCompose}
+            accessibilityLabel="Broadcast New Service Alert"
+          >
+            <Send size={16} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={styles.composeButtonText}>New Broadcast</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* 3-Stat Operations Ribbon */}
@@ -392,11 +452,16 @@ export default function DisruptionAlertScreen() {
                 {/* Card Header */}
                 <View style={styles.cardHeader}>
                   <View style={{ flex: 1, paddingRight: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                       <Text style={styles.alertIdText}>#{a.id}</Text>
                       <View style={[styles.sevBadge, { backgroundColor: `${sevColor}22`, borderColor: `${sevColor}55` }]}>
                         <Text style={[styles.sevBadgeText, { color: sevColor }]}>{a.severity.toUpperCase()}</Text>
                       </View>
+                      {a.source === 'Driver' && (
+                        <View style={styles.driverTagPill}>
+                          <Text style={styles.driverTagText}>🚨 DRIVER REPORT</Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.incidentTitleText}>{a.incidentType}</Text>
                   </View>
@@ -447,7 +512,9 @@ export default function DisruptionAlertScreen() {
 
                 {/* Footer with Timestamp and Action Buttons */}
                 <View style={styles.cardFooter}>
-                  <Text style={styles.timestampText}>Dispatched: {a.broadcastAt}</Text>
+                  <Text style={styles.timestampText}>
+                    Dispatched: {a.broadcastAt}{a.broadcastBy ? ` • ${a.broadcastBy}` : ''}
+                  </Text>
 
                   <View style={styles.actionsGroup}>
                     <TouchableOpacity
@@ -779,6 +846,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
+  refreshIconBtn: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
   ribbonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -899,6 +980,20 @@ const styles = StyleSheet.create({
   sevBadgeText: {
     fontSize: 10,
     fontWeight: '800',
+  },
+  driverTagPill: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  driverTagText: {
+    color: '#B45309',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   incidentTitleText: {
     color: '#0F172A',

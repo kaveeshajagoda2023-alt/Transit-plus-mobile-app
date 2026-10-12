@@ -1,26 +1,31 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Alert, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Shield, Download, Sun, LogOut, Award, CheckCircle2, FileSpreadsheet, FileCode, FileText, X } from 'lucide-react-native';
+import { Shield, Download, Sun, LogOut, Award, CheckCircle2, FileSpreadsheet, FileCode, FileText, X, Eye, Share2 } from 'lucide-react-native';
 import { TransitColors, TransitShadows } from '@/constants/transitTheme';
-import { executeAuditExport, ExportFormat, ExportRange } from '@/services/utils/auditExportService';
+import {
+  executeAuditExport,
+  ExportFormat,
+  ExportRange,
+  ExportResult,
+  FLEET_SNAPSHOT,
+  ALERTS_SNAPSHOT,
+  SCANS_SNAPSHOT,
+  getRangeLabel,
+} from '@/services/utils/auditExportService';
 
 export default function AdminProfileScreen() {
   const router = useRouter();
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>('PDF');
   const [exportRange, setExportRange] = useState<ExportRange>('24h');
   const [isExporting, setIsExporting] = useState(false);
+  const [lastExportResult, setLastExportResult] = useState<ExportResult | null>(null);
 
   const handleLogout = () => {
-    Alert.alert(
-      'Sign Out of Ops Portal',
-      'Are you sure you want to exit the Transport Coordinator control hub?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', style: 'destructive', onPress: () => router.replace('/') },
-      ]
-    );
+    setShowLogoutModal(true);
   };
 
   const handleExecuteExport = async () => {
@@ -34,13 +39,21 @@ export default function AdminProfileScreen() {
       });
       setIsExporting(false);
       setShowExportModal(false);
+      setLastExportResult(result);
+
       Alert.alert(
-        'Audit Report Downloaded',
-        `File "${result.filename}" has been generated and saved.\n\n• Location: ${result.filePathNotice}\n\nWould you like to open and view the document in a new browser tab now?`,
+        'Audit Report Ready',
+        `File "${result.filename}" has been generated successfully.\n\n• Location: ${result.filePathNotice}\n\nYou can view the formatted report on-screen, or save/share the document on your device.`,
         [
-          { text: 'Close', style: 'cancel' },
+          { text: 'Done', style: 'cancel' },
           {
-            text: 'Open & View',
+            text: 'Preview Report',
+            onPress: () => {
+              setShowPreviewModal(true);
+            },
+          },
+          {
+            text: 'Share / Save',
             onPress: () => {
               if (result.viewReport) {
                 result.viewReport();
@@ -52,6 +65,30 @@ export default function AdminProfileScreen() {
     } catch (err: any) {
       setIsExporting(false);
       Alert.alert('Export Failed', err?.message || 'An error occurred while generating the audit file.');
+    }
+  };
+
+  const handleShareFromPreview = async () => {
+    if (lastExportResult?.viewReport) {
+      lastExportResult.viewReport();
+      return;
+    }
+    try {
+      setIsExporting(true);
+      const result = await executeAuditExport({
+        format: exportFormat,
+        range: exportRange,
+        coordinatorName: 'K. K. Jagoda',
+        staffId: 'CDR-8910@transitpulse.gov',
+      });
+      setIsExporting(false);
+      setLastExportResult(result);
+      if (result.viewReport) {
+        result.viewReport();
+      }
+    } catch (err: any) {
+      setIsExporting(false);
+      Alert.alert('Sharing Error', err?.message || 'Could not trigger native share sheet.');
     }
   };
 
@@ -201,6 +238,16 @@ export default function AdminProfileScreen() {
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
+                style={styles.previewBtn} 
+                onPress={() => {
+                  setShowExportModal(false);
+                  setShowPreviewModal(true);
+                }}
+              >
+                <Eye size={15} color="#0F2942" style={{ marginRight: 4 }} />
+                <Text style={styles.previewBtnText}>Preview</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
                 style={styles.exportConfirmBtn} 
                 onPress={handleExecuteExport}
                 disabled={isExporting}
@@ -209,12 +256,220 @@ export default function AdminProfileScreen() {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Download size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.exportConfirmBtnText}>Generate & Download</Text>
+                    <Download size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.exportConfirmBtnText}>Download</Text>
                   </>
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* IN-APP AUDIT REPORT PREVIEW MODAL */}
+      <Modal
+        visible={showPreviewModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPreviewModal(false)}
+      >
+        <View style={styles.previewContainer}>
+          {/* Header Bar */}
+          <View style={styles.previewHeader}>
+            <View>
+              <Text style={styles.previewHeaderSub}>Official Telemetry Document</Text>
+              <Text style={styles.previewHeaderTitle}>System Audit Report</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                style={styles.previewShareBtn}
+                onPress={handleShareFromPreview}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Share2 size={15} color="#FFFFFF" style={{ marginRight: 5 }} />
+                    <Text style={styles.previewShareBtnText}>Share / Save</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={() => setShowPreviewModal(false)}
+              >
+                <X size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Document Content */}
+          <ScrollView
+            style={styles.previewScroll}
+            contentContainerStyle={styles.previewScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header Banner */}
+            <View style={styles.docBanner}>
+              <Text style={styles.docBannerTitle}>TRANSITPLUS OPERATIONS ADMINISTRATION</Text>
+              <Text style={styles.docBannerSub}>OFFICIAL SYSTEM AUDIT & FLEET TELEMETRY REPORT (TIER 3)</Text>
+            </View>
+
+            {/* Meta Grid */}
+            <View style={styles.docMetaCard}>
+              <View style={styles.docMetaRow}>
+                <View style={styles.docMetaItem}>
+                  <Text style={styles.docMetaLabel}>ISSUED BY</Text>
+                  <Text style={styles.docMetaVal}>K. K. Jagoda (Coordinator)</Text>
+                </View>
+                <View style={styles.docMetaItem}>
+                  <Text style={styles.docMetaLabel}>AUDIT WINDOW</Text>
+                  <Text style={styles.docMetaVal}>{getRangeLabel(exportRange)}</Text>
+                </View>
+              </View>
+              <View style={styles.docMetaRow}>
+                <View style={styles.docMetaItem}>
+                  <Text style={styles.docMetaLabel}>SECURITY CLEARANCE</Text>
+                  <Text style={styles.docMetaVal}>Tier 3 Master Clearance</Text>
+                </View>
+                <View style={styles.docMetaItem}>
+                  <Text style={styles.docMetaLabel}>ENCRYPTION</Text>
+                  <Text style={styles.docMetaVal}>HMAC-SHA256 Multi-Node</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* KPI Cards */}
+            <View style={styles.docKpiGrid}>
+              <View style={[styles.docKpiCard, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}>
+                <Text style={styles.docKpiLabel}>FLEET UNITS</Text>
+                <Text style={[styles.docKpiVal, { color: '#0284C7' }]}>18 ACTIVE</Text>
+              </View>
+              <View style={[styles.docKpiCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                <Text style={styles.docKpiLabel}>OPERATIONAL</Text>
+                <Text style={[styles.docKpiVal, { color: '#059669' }]}>94.8% RATE</Text>
+              </View>
+              <View style={[styles.docKpiCard, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
+                <Text style={styles.docKpiLabel}>TICKET SCANS</Text>
+                <Text style={[styles.docKpiVal, { color: '#D97706' }]}>246 SCANS</Text>
+              </View>
+              <View style={[styles.docKpiCard, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                <Text style={styles.docKpiLabel}>ALERTS</Text>
+                <Text style={[styles.docKpiVal, { color: '#DC2626' }]}>1 ADVISORY</Text>
+              </View>
+            </View>
+
+            {/* Section 1: Fleet Inventory */}
+            <Text style={styles.docSectionTitle}>1. FLEET TELEMETRY & ASSET STATUS</Text>
+            <View style={styles.docTableCard}>
+              {FLEET_SNAPSHOT.map((row, idx) => (
+                <View key={row.id} style={[styles.docTableRow, idx % 2 === 1 && styles.docTableRowAlt]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.docTableRowTitle}>{row.id} • {row.route}</Text>
+                    <Text style={styles.docTableRowSub}>Operator: {row.driver} | Capacity: {row.load}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.docStatusBadge, row.status === 'Delayed' ? styles.statusDelayed : styles.statusActive]}>
+                      {row.status}
+                    </Text>
+                    <Text style={styles.docHealthText}>Health: {row.health}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            {/* Section 2: Active Disruption Alerts */}
+            <Text style={styles.docSectionTitle}>2. ACTIVE DISRUPTION BROADCASTS</Text>
+            <View style={styles.docTableCard}>
+              {ALERTS_SNAPSHOT.map((alert) => (
+                <View key={alert.code} style={styles.docTableRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.docTableRowTitle}>{alert.code} • {alert.route}</Text>
+                    <Text style={styles.docTableRowSub}>{alert.message}</Text>
+                  </View>
+                  <Text style={[styles.docStatusBadge, alert.severity === 'Moderate' ? styles.statusDelayed : styles.statusActive]}>
+                    {alert.severity}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Section 3: Conductor Ticket Scans */}
+            <Text style={styles.docSectionTitle}>3. TICKET SCANS & CRYPTOGRAPHIC VERIFICATION</Text>
+            <View style={styles.docTableCard}>
+              {SCANS_SNAPSHOT.map((scan) => (
+                <View key={scan.ticket} style={styles.docTableRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.docTableRowTitle}>{scan.ticket} • {scan.passenger}</Text>
+                    <Text style={styles.docTableRowSub}>{scan.scanner}</Text>
+                    <Text style={styles.docHmacText}>HMAC: {scan.hmac}</Text>
+                  </View>
+                  <Text style={[styles.docStatusBadge, scan.result.includes('VALID') ? styles.statusActive : styles.statusFlagged]}>
+                    {scan.result}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Footer Notice */}
+            <View style={styles.docFooter}>
+              <Shield size={16} color="#059669" style={{ marginRight: 6 }} />
+              <Text style={styles.docFooterText}>
+                Cryptographically certified by TransitPlus Core Telemetry Engine • Tier 3 Verified
+              </Text>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* SIGN OUT CONFIRMATION MODAL */}
+      <Modal
+        visible={showLogoutModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowLogoutModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, styles.logoutModalCard]}>
+            <View style={styles.logoutIconCircle}>
+              <LogOut size={26} color="#DC2626" />
+            </View>
+            <Text style={styles.logoutModalTitle}>Sign Out of Ops Portal</Text>
+            <Text style={styles.logoutModalDesc}>
+              Are you sure you want to exit your administrative session? You can return anytime with coordinator credentials.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.logoutConfirmBtn}
+              onPress={() => {
+                setShowLogoutModal(false);
+                router.replace('/admin/login');
+              }}
+              activeOpacity={0.8}
+            >
+              <LogOut size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.logoutConfirmBtnText}>Sign Out to Admin Login</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutSecondaryBtn}
+              onPress={() => {
+                setShowLogoutModal(false);
+                router.replace('/role-selection');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.logoutSecondaryBtnText}>Switch Role / Main Portal</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutCancelBtn}
+              onPress={() => setShowLogoutModal(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.logoutCancelBtnText}>Cancel & Stay Signed In</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -503,8 +758,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
+  previewBtn: {
+    flex: 1.1,
+    flexDirection: 'row',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E2E8F0',
+  },
+  previewBtnText: {
+    color: '#0F2942',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   exportConfirmBtn: {
-    flex: 1.6,
+    flex: 1.4,
     flexDirection: 'row',
     paddingVertical: 12,
     borderRadius: 12,
@@ -516,5 +785,270 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+  /* LOGOUT MODAL STYLES */
+  logoutModalCard: {
+    maxWidth: 380,
+    padding: 24,
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  logoutIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  logoutModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  logoutModalDesc: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  logoutConfirmBtn: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DC2626',
+    borderRadius: 12,
+    paddingVertical: 13,
+    marginBottom: 10,
+    ...TransitShadows.card,
+  },
+  logoutConfirmBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  logoutSecondaryBtn: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  logoutSecondaryBtnText: {
+    color: '#0F2942',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  logoutCancelBtn: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  logoutCancelBtnText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  /* PREVIEW MODAL STYLES */
+  previewContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    ...TransitShadows.card,
+  },
+  previewHeaderSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  previewHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F2942',
+  },
+  previewShareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F2942',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  previewShareBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  previewScroll: {
+    flex: 1,
+  },
+  previewScrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  docBanner: {
+    backgroundColor: '#0F2942',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  docBannerTitle: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13.5,
+    letterSpacing: 0.4,
+  },
+  docBannerSub: {
+    color: '#93C5FD',
+    fontWeight: '600',
+    fontSize: 10,
+    marginTop: 4,
+  },
+  docMetaCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+  },
+  docMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  docMetaItem: {
+    flex: 1,
+  },
+  docMetaLabel: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  docMetaVal: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  docKpiGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  docKpiCard: {
+    flex: 1,
+    padding: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  docKpiLabel: {
+    fontSize: 8.5,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  docKpiVal: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  docSectionTitle: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#0F2942',
+    marginBottom: 8,
+    marginTop: 6,
+    letterSpacing: 0.3,
+  },
+  docTableCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  docTableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  docTableRowAlt: {
+    backgroundColor: '#F8FAFC',
+  },
+  docTableRowTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  docTableRowSub: {
+    fontSize: 10.5,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  docHmacText: {
+    fontSize: 9.5,
+    color: '#94A3B8',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginTop: 2,
+  },
+  docStatusBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    fontSize: 9.5,
+    fontWeight: '700',
+    overflow: 'hidden',
+  },
+  statusActive: {
+    backgroundColor: '#DCFCE7',
+    color: '#15803D',
+  },
+  statusDelayed: {
+    backgroundColor: '#FEF3C7',
+    color: '#B45309',
+  },
+  statusFlagged: {
+    backgroundColor: '#FEE2E2',
+    color: '#B91C1C',
+  },
+  docHealthText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#059669',
+    marginTop: 3,
+  },
+  docFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    marginTop: 6,
+  },
+  docFooterText: {
+    fontSize: 10.5,
+    color: '#059669',
+    fontWeight: '600',
+    textAlign: 'center',
+    flex: 1,
   },
 });

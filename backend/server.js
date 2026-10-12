@@ -1,18 +1,35 @@
-const http = require('http');
-const url = require('url');
+import http from 'http';
+import url from 'url';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dns from 'dns';
+import mongoose from 'mongoose';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const PORT = 5000;
 
-// In-Memory Seed Data for Member 4 (Admin & Fleet Operations)
-let vehicles = [
-  { vehicleId: 'TN-0821', routeId: 'Route 42', routeName: 'Line 42 Eastbound (Central to University)', transportType: 'Bus', driverName: 'Saran Diya', driverId: 'DRV-401', speed: 42, location: { lat: 6.9271, lng: 79.8612 }, occupancyCurrent: 36, occupancyMax: 50, status: 'Active', lastUpdated: new Date() },
-  { vehicleId: 'TN-0824', routeId: 'Route 42', routeName: 'Line 42 Eastbound (Market St to Malabe)', transportType: 'Bus', driverName: 'Kavithushan B.', driverId: 'DRV-102', speed: 18, location: { lat: 6.9147, lng: 79.8732 }, occupancyCurrent: 48, occupancyMax: 50, status: 'Delayed', lastUpdated: new Date() },
-  { vehicleId: 'TN-0830', routeId: 'Route 18', routeName: 'Route 18 Express Train', transportType: 'Train', driverName: 'Anura Bandara', driverId: 'DRV-809', speed: 65, location: { lat: 6.9344, lng: 79.8500 }, occupancyCurrent: 120, occupancyMax: 200, status: 'Active', lastUpdated: new Date() },
-  { vehicleId: 'TN-0842', routeId: 'Route 105', routeName: 'Route 105 BRT Bus', transportType: 'Bus', driverName: 'Nimal Perera', driverId: 'DRV-304', speed: 0, location: { lat: 6.9011, lng: 79.8655 }, occupancyCurrent: 0, occupancyMax: 50, status: 'Maintenance', lastUpdated: new Date() },
-  { vehicleId: 'TN-0855', routeId: 'Route 42', routeName: 'Line 42 Westbound', transportType: 'Bus', driverName: 'Kamal Silva', driverId: 'DRV-220', speed: 38, location: { lat: 6.9200, lng: 79.8800 }, occupancyCurrent: 24, occupancyMax: 50, status: 'Active', lastUpdated: new Date() }
+// Persistent Data Storage Directory
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
+}
+
+const VEHICLES_FILE = path.join(DATA_DIR, 'fleet_vehicles.json');
+const ALERTS_FILE = path.join(DATA_DIR, 'disruption_alerts.json');
+const TICKETS_FILE = path.join(DATA_DIR, 'ticket_audits.json');
+
+const SEED_VEHICLES = [
+  { vehicleId: 'TN-0821', routeId: 'Route 42', routeName: 'Line 42 Eastbound (Central to University)', transportType: 'Bus', driverName: 'Saran Diya', driverId: 'DRV-401', speed: 42, location: { lat: 6.9271, lng: 79.8612 }, occupancyCurrent: 36, occupancyMax: 50, status: 'Active', healthScore: 94, nextInspection: '24 Oct 2026', lastUpdated: new Date() },
+  { vehicleId: 'TN-0824', routeId: 'Route 42', routeName: 'Line 42 Eastbound (Market St to Malabe)', transportType: 'Bus', driverName: 'Kavithushan B.', driverId: 'DRV-102', speed: 18, location: { lat: 6.9147, lng: 79.8732 }, occupancyCurrent: 48, occupancyMax: 50, status: 'Delayed', healthScore: 82, nextInspection: '19 Oct 2026', lastUpdated: new Date() },
+  { vehicleId: 'TN-0830', routeId: 'Route 18', routeName: 'Route 18 Express Train', transportType: 'Train', driverName: 'Anura Bandara', driverId: 'DRV-809', speed: 65, location: { lat: 6.9344, lng: 79.8500 }, occupancyCurrent: 120, occupancyMax: 200, status: 'Active', healthScore: 98, nextInspection: '28 Oct 2026', lastUpdated: new Date() },
+  { vehicleId: 'TN-0842', routeId: 'Route 105', routeName: 'Route 105 BRT Bus', transportType: 'Bus', driverName: 'Nimal Perera', driverId: 'DRV-304', speed: 0, location: { lat: 6.9011, lng: 79.8655 }, occupancyCurrent: 0, occupancyMax: 50, status: 'Maintenance', healthScore: 64, nextInspection: 'Immediate Inspection', lastUpdated: new Date() },
+  { vehicleId: 'TN-0855', routeId: 'Route 42', routeName: 'Line 42 Westbound', transportType: 'Bus', driverName: 'Kamal Silva', driverId: 'DRV-220', speed: 38, location: { lat: 6.9200, lng: 79.8800 }, occupancyCurrent: 24, occupancyMax: 50, status: 'Active', healthScore: 91, nextInspection: '22 Oct 2026', lastUpdated: new Date() }
 ];
 
-let ticketAudits = [
+const SEED_TICKETS = [
   { ticketId: '#TK-9824-B01', passType: 'Single Journey Pass', routeId: 'Route 42', fare: 65.00, passengerName: 'Elena Rosiera', scannedAt: new Date(Date.now() - 300000), conductorId: 'CND-77492', status: 'valid', anomalyReason: '' },
   { ticketId: '#TK-9827-C18', passType: 'Metro Rapid Monthly Pass', routeId: 'Route 18', fare: 680.00, passengerName: 'Kasun Wickrama', scannedAt: new Date(Date.now() - 600000), conductorId: 'CND-88201', status: 'valid', anomalyReason: '' },
   { ticketId: '#TK-9830-D42', passType: 'Single Journey Pass', routeId: 'Route 42', fare: 65.00, passengerName: 'Unknown Commuter', scannedAt: new Date(Date.now() - 900000), conductorId: 'CND-77492', status: 'flagged', anomalyReason: 'Outdoor QR Glare / Low Contrast Scan Retry (UI-01)' },
@@ -21,9 +38,51 @@ let ticketAudits = [
   { ticketId: '#TK-9842-C09', passType: 'Student Transit Pass', routeId: 'Route 18', fare: 40.00, passengerName: 'Saman Kumara', scannedAt: new Date(Date.now() - 2400000), conductorId: 'CND-88201', status: 'valid', anomalyReason: '' }
 ];
 
-let disruptionAlerts = [
+const SEED_ALERTS = [
   { alertId: 'ALT-1092', incidentType: 'Major Track Maintenance & Water Main Burst', affectedRoute: 'Route 42 Eastbound (Central to University)', affectedTransportType: 'Bus & Train', severity: 'High', delayMinutes: 15, rerouteInstruction: 'Reroute via Station Road Bypass', broadcastedAt: new Date(Date.now() - 3600000), broadcastBy: 'Admin (IT23762572)', status: 'Active' }
 ];
+
+function loadJson(filePath, defaultValue) {
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error(`[STORAGE] Error reading ${filePath}:`, e.message);
+  }
+  return defaultValue;
+}
+
+function saveJson(filePath, data) {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.error(`[STORAGE] Error writing ${filePath}:`, e.message);
+  }
+}
+
+// Initialize persistent state from disk or seeds
+let vehicles = loadJson(VEHICLES_FILE, SEED_VEHICLES);
+let ticketAudits = loadJson(TICKETS_FILE, SEED_TICKETS);
+let disruptionAlerts = loadJson(ALERTS_FILE, SEED_ALERTS);
+
+// Write seed files if first time running
+if (!fs.existsSync(VEHICLES_FILE)) saveJson(VEHICLES_FILE, vehicles);
+if (!fs.existsSync(ALERTS_FILE)) saveJson(ALERTS_FILE, disruptionAlerts);
+if (!fs.existsSync(TICKETS_FILE)) saveJson(TICKETS_FILE, ticketAudits);
+
+// Optional MongoDB Atlas Cloud Sync
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+  const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://it23759152_db_user:r100SSYPSuH7kfcy@cluster0.8h3sprz.mongodb.net/transitplus?retryWrites=true&w=majority&appName=Cluster0';
+  mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 4000 })
+    .then(() => console.log('✅ [DATABASE] Connected to MongoDB Atlas Cloud datastore'))
+    .catch((err) => console.log('📁 [DATABASE] Persistent local datastore active in backend/data (MongoDB Atlas remote access restricted).'));
+} catch (e) {
+  console.log('📁 [DATABASE] Persistent local datastore active in backend/data');
+}
 
 const server = http.createServer((req, res) => {
   // Enable CORS headers
@@ -107,6 +166,7 @@ const server = http.createServer((req, res) => {
           lastUpdated: new Date()
         };
         vehicles.unshift(newVehicle);
+        saveJson(VEHICLES_FILE, vehicles);
         console.log(`🚌 [FLEET MANAGEMENT] Added vehicle: ${newVehicle.vehicleId} (${newVehicle.transportType})`);
         res.writeHead(201, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Vehicle registered successfully.', vehicle: newVehicle }));
@@ -137,6 +197,7 @@ const server = http.createServer((req, res) => {
           ...data,
           lastUpdated: new Date()
         };
+        saveJson(VEHICLES_FILE, vehicles);
         console.log(`🔧 [FLEET MANAGEMENT] Updated vehicle: ${targetId} -> Status: ${vehicles[index].status}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Vehicle updated.', vehicle: vehicles[index] }));
@@ -163,6 +224,7 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ success: false, error: 'Vehicle not found' }));
           return;
         }
+        saveJson(VEHICLES_FILE, vehicles);
         console.log(`🗑️ [FLEET MANAGEMENT] Decommissioned vehicle: ${targetId}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Vehicle decommissioned from fleet.' }));
@@ -186,10 +248,74 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 4b. Update / Flag / Resolve Ticket Audit Record
+  if ((pathname.startsWith('/api/admin/audit/tickets/action') || pathname.startsWith('/api/admin/audit/tickets/update')) && (req.method === 'PUT' || req.method === 'POST')) {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body || '{}');
+        const targetId = data.ticketId;
+        const index = ticketAudits.findIndex(t => t.ticketId === targetId);
+        if (index === -1) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Ticket audit record not found' }));
+          return;
+        }
+        ticketAudits[index] = {
+          ...ticketAudits[index],
+          ...data,
+          lastUpdated: new Date()
+        };
+        saveJson(TICKETS_FILE, ticketAudits);
+        console.log(`📋 [TICKET AUDIT] Updated ticket: ${targetId} -> Status: ${ticketAudits[index].status}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Ticket audit record updated.', ticket: ticketAudits[index] }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid payload' }));
+      }
+    });
+    return;
+  }
+
   // 5. Disruption Alerts API (FR6, FR7, FR8)
   if (pathname === '/api/admin/disruptions' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, alerts: disruptionAlerts }));
+    return;
+  }
+
+  // 5a. Driver Delay Report Bridge (Driver Panel -> Admin Disruption Hub)
+  if ((pathname === '/api/admin/disruptions/driver-report' || pathname === '/api/trips/report-delay') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body || '{}');
+        const driverAlert = {
+          alertId: 'ALT-DRV-' + Math.floor(1000 + Math.random() * 9000),
+          incidentType: data.reason || data.incidentType || 'Driver Reported Route Delay',
+          affectedRoute: data.route || data.routeId || data.affectedRoute || 'Route 42 Eastbound',
+          affectedTransportType: data.transportType || 'Bus',
+          severity: (data.estimatedDelayMinutes || data.delayMinutes) > 20 ? 'High' : 'Medium',
+          delayMinutes: parseInt(data.estimatedDelayMinutes || data.delayMinutes) || 15,
+          rerouteInstruction: data.notes || data.rerouteInstruction || 'Driver reported schedule disruption. Awaiting coordinator advisory.',
+          broadcastedAt: new Date(),
+          broadcastBy: `Operator (${data.driverId || data.driverName || 'DRV-Onboard'})`,
+          status: 'Active',
+          source: 'Driver'
+        };
+        disruptionAlerts.unshift(driverAlert);
+        saveJson(ALERTS_FILE, disruptionAlerts);
+        console.log(`🚨 [DRIVER DELAY REPORT] Forwarded to Admin Hub: ${driverAlert.incidentType} on ${driverAlert.affectedRoute}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Driver delay recorded and forwarded to Admin Ops.', alert: driverAlert }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid payload' }));
+      }
+    });
     return;
   }
 
@@ -211,6 +337,7 @@ const server = http.createServer((req, res) => {
         status: data.status || 'Active'
       };
       disruptionAlerts.unshift(newAlert);
+      saveJson(ALERTS_FILE, disruptionAlerts);
 
       console.log(`📢 [EMERGENCY BROADCAST] Alert sent: ${newAlert.incidentType} on ${newAlert.affectedRoute}`);
 
@@ -239,6 +366,7 @@ const server = http.createServer((req, res) => {
           ...data,
           lastUpdated: new Date()
         };
+        saveJson(ALERTS_FILE, disruptionAlerts);
         console.log(`✏️ [DISRUPTION UPDATE] Updated alert: ${targetId} -> Status: ${disruptionAlerts[index].status}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Disruption alert updated.', alert: disruptionAlerts[index] }));
@@ -265,6 +393,7 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ success: false, error: 'Alert not found' }));
           return;
         }
+        saveJson(ALERTS_FILE, disruptionAlerts);
         console.log(`🗑️ [DISRUPTION WITHDRAWN] Withdrew alert: ${targetId}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Disruption alert withdrawn from broadcast.' }));

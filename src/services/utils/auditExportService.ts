@@ -1,11 +1,12 @@
 import { Platform } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export type ExportFormat = 'PDF' | 'CSV' | 'JSON';
 export type ExportRange = '24h' | '7d' | 'all';
 
-interface AuditExportOptions {
+export interface AuditExportOptions {
   format: ExportFormat;
   range: ExportRange;
   coordinatorName?: string;
@@ -13,7 +14,7 @@ interface AuditExportOptions {
 }
 
 // Fleet data snapshot for audit report
-const FLEET_SNAPSHOT = [
+export const FLEET_SNAPSHOT = [
   { id: 'TB-1042', route: 'Line 42 Eastbound', driver: 'Saran Diya', load: '38/50 (76%)', status: 'Active', health: '96%' },
   { id: 'TT-2089', route: 'Coastal Line Metro', driver: 'Kamal Perera', load: '142/200 (71%)', status: 'Active', health: '94%' },
   { id: 'TB-1045', route: 'Route 18 Express', driver: 'Ruwan Silva', load: '44/50 (88%)', status: 'Delayed', health: '68%' },
@@ -21,18 +22,18 @@ const FLEET_SNAPSHOT = [
   { id: 'TB-1050', route: 'Route 105 BRT Shuttle', driver: 'Amal Fonseka', load: '12/40 (30%)', status: 'Standby', health: '98%' },
 ];
 
-const ALERTS_SNAPSHOT = [
+export const ALERTS_SNAPSHOT = [
   { code: 'ALT-904', severity: 'Moderate', route: 'Route 18 Express', message: 'Road resurfacing: 12 min schedule delay', status: 'Active Broadcast' },
   { code: 'ALT-901', severity: 'Minor', route: 'Station Turnstiles', message: 'Scheduled routine firmware upgrade completed', status: 'Resolved (Archive)' },
 ];
 
-const SCANS_SNAPSHOT = [
+export const SCANS_SNAPSHOT = [
   { ticket: 'TK-89412', passenger: 'Adult Standard', scanner: 'Bus Turnstile #04 (Route 42)', hmac: 'e3b0c44...9a8f', result: 'VALID PASS' },
   { ticket: 'TK-89413', passenger: 'Student Pass (50%)', scanner: 'Platform Turnstile #02', hmac: 'cf83ac1...2b61', result: 'VALID PASS' },
   { ticket: 'TK-89410', passenger: 'Adult Standard', scanner: 'Conductor Handheld #12', hmac: '9b71d22...4e02', result: 'FLAGGED (DUP)' },
 ];
 
-function getRangeLabel(range: ExportRange): string {
+export function getRangeLabel(range: ExportRange): string {
   switch (range) {
     case '24h':
       return 'Last 24 Hours';
@@ -550,7 +551,8 @@ function downloadFileOnWeb(content: string, filename: string, mimeType: string) 
 export interface ExportResult {
   success: boolean;
   filename: string;
-  viewReport?: () => void;
+  localUri?: string;
+  viewReport?: () => Promise<void> | void;
   filePathNotice: string;
 }
 
@@ -595,26 +597,82 @@ export async function executeAuditExport(options: AuditExportOptions): Promise<E
         filePathNotice: 'Downloads folder (Shortcut: Ctrl + J)',
       };
     } else {
-      // Native iOS / Android: Generate PDF file and trigger native share sheet
-      const { uri } = await Print.printToFileAsync({ html });
-      const viewReport = async () => {
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, {
-            mimeType: 'application/pdf',
-            dialogTitle: 'Save System Audit Report PDF',
-            UTI: 'com.adobe.pdf',
+      // Native iOS / Android: Generate PDF file via Print with base64 enabled
+      let targetUri = '';
+      let printUri = '';
+
+      try {
+        const printResult = await Print.printToFileAsync({ html, base64: true });
+        printUri = printResult.uri;
+
+        // Scoped document directory path (authorized in Expo Go & standalone builds)
+        const docDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
+        targetUri = `${docDir}${filename}`;
+
+        if (printResult.base64) {
+          // Write base64 directly into scoped storage
+          await FileSystem.writeAsStringAsync(targetUri, printResult.base64, {
+            encoding: FileSystem.EncodingType.Base64,
           });
+        } else {
+          // Fallback: copy file from cache to scoped documents
+          await FileSystem.copyAsync({
+            from: printResult.uri,
+            to: targetUri,
+          });
+        }
+      } catch (genErr) {
+        console.warn('PDF generation / scoped storage write issue:', genErr);
+      }
+
+      // Determine the best accessible file URI
+      let effectiveUri = targetUri || printUri;
+      if (targetUri) {
+        try {
+          const info = await FileSystem.getInfoAsync(targetUri);
+          if (!info.exists && printUri) {
+            effectiveUri = printUri;
+          }
+        } catch {
+          if (printUri) effectiveUri = printUri;
+        }
+      }
+
+      const viewReport = async () => {
+        try {
+          const isAvailable = await Sharing.isAvailableAsync();
+          if (isAvailable && effectiveUri) {
+            await Sharing.shareAsync(effectiveUri, {
+              mimeType: 'application/pdf',
+              dialogTitle: 'Save / Share System Audit Report PDF',
+              UTI: 'com.adobe.pdf',
+            });
+          }
+        } catch (shareErr: any) {
+          console.warn('Sharing error caught safely:', shareErr?.message);
         }
       };
 
-      // Automatically prompt share/save sheet
-      await viewReport();
+      // Safely attempt the native share sheet
+      try {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable && effectiveUri) {
+          await Sharing.shareAsync(effectiveUri, {
+            mimeType: 'application/pdf',
+            dialogTitle: 'Save / Share System Audit Report PDF',
+            UTI: 'com.adobe.pdf',
+          });
+        }
+      } catch (initialErr: any) {
+        console.warn('Initial share prompt dismissed or skipped:', initialErr?.message);
+      }
 
       return {
         success: true,
         filename,
+        localUri: effectiveUri,
         viewReport,
-        filePathNotice: 'Files App / Device Storage',
+        filePathNotice: 'Device Storage (TransitPulse Scoped Documents)',
       };
     }
   }
@@ -639,18 +697,49 @@ export async function executeAuditExport(options: AuditExportOptions): Promise<E
         filePathNotice: 'Downloads folder (Shortcut: Ctrl + J)',
       };
     } else {
-      const htmlWrapper = `<pre>${csvData}</pre>`;
-      const { uri } = await Print.printToFileAsync({ html: htmlWrapper });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'text/csv',
-          dialogTitle: 'Save System Audit CSV',
+      let targetUri = '';
+      try {
+        const docDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
+        targetUri = `${docDir}${filename}`;
+        await FileSystem.writeAsStringAsync(targetUri, csvData, {
+          encoding: FileSystem.EncodingType.UTF8,
         });
+      } catch (csvErr) {
+        console.warn('Error saving CSV to scoped directory:', csvErr);
       }
+
+      const viewReport = async () => {
+        try {
+          const isAvailable = await Sharing.isAvailableAsync();
+          if (isAvailable && targetUri) {
+            await Sharing.shareAsync(targetUri, {
+              mimeType: 'text/csv',
+              dialogTitle: 'Save / Share System Audit CSV',
+            });
+          }
+        } catch (shareErr: any) {
+          console.warn('CSV Sharing error:', shareErr?.message);
+        }
+      };
+
+      try {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable && targetUri) {
+          await Sharing.shareAsync(targetUri, {
+            mimeType: 'text/csv',
+            dialogTitle: 'Save / Share System Audit CSV',
+          });
+        }
+      } catch (initialErr: any) {
+        console.warn('Initial CSV share dismissed:', initialErr?.message);
+      }
+
       return {
         success: true,
         filename,
-        filePathNotice: 'Files App / Device Storage',
+        localUri: targetUri,
+        viewReport,
+        filePathNotice: 'Device Storage (TransitPulse Scoped Documents)',
       };
     }
   }
@@ -675,18 +764,49 @@ export async function executeAuditExport(options: AuditExportOptions): Promise<E
       filePathNotice: 'Downloads folder (Shortcut: Ctrl + J)',
     };
   } else {
-    const htmlWrapper = `<pre>${jsonData}</pre>`;
-    const { uri } = await Print.printToFileAsync({ html: htmlWrapper });
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/json',
-        dialogTitle: 'Save System Audit JSON',
+    let targetUri = '';
+    try {
+      const docDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
+      targetUri = `${docDir}${filename}`;
+      await FileSystem.writeAsStringAsync(targetUri, jsonData, {
+        encoding: FileSystem.EncodingType.UTF8,
       });
+    } catch (jsonErr) {
+      console.warn('Error saving JSON to scoped directory:', jsonErr);
     }
+
+    const viewReport = async () => {
+      try {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable && targetUri) {
+          await Sharing.shareAsync(targetUri, {
+            mimeType: 'application/json',
+            dialogTitle: 'Save / Share System Audit JSON',
+          });
+        }
+      } catch (shareErr: any) {
+        console.warn('JSON Sharing error:', shareErr?.message);
+      }
+    };
+
+    try {
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable && targetUri) {
+        await Sharing.shareAsync(targetUri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Save / Share System Audit JSON',
+        });
+      }
+    } catch (initialErr: any) {
+      console.warn('Initial JSON share dismissed:', initialErr?.message);
+    }
+
     return {
       success: true,
       filename,
-      filePathNotice: 'Files App / Device Storage',
+      localUri: targetUri,
+      viewReport,
+      filePathNotice: 'Device Storage (TransitPulse Scoped Documents)',
     };
   }
 }

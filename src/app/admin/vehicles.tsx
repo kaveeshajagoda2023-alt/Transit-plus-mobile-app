@@ -33,6 +33,14 @@ import {
   Sparkles,
 } from 'lucide-react-native';
 import { TransitColors, TransitShadows } from '@/constants/transitTheme';
+import { getAdminApiUrl } from '@/services/utils/adminApiUrl';
+import { adminDataStorage } from '@/services/storage/adminDataStorage';
+
+export interface VehicleCheckItem {
+  system: string;
+  status: string;
+  ok: boolean;
+}
 
 export interface VehicleRecord {
   vehicleId: string;
@@ -47,6 +55,7 @@ export interface VehicleRecord {
   status: 'Active' | 'Delayed' | 'Maintenance' | 'Standby';
   healthScore?: number;
   nextInspection?: string;
+  safetyChecklist?: VehicleCheckItem[];
   lastUpdated?: string | Date;
 }
 
@@ -147,15 +156,25 @@ export default function VehicleManagementScreen() {
   const [formCapacity, setFormCapacity] = useState('50');
   const [formStatus, setFormStatus] = useState<'Active' | 'Delayed' | 'Maintenance' | 'Standby'>('Active');
 
-  // Load from backend if available
+  // Inspection state for Health Modal (Admin control)
+  const [inspectHealthScore, setInspectHealthScore] = useState<number>(94);
+  const [inspectNextDate, setInspectNextDate] = useState<string>('24 Oct 2026');
+  const [inspectChecklist, setInspectChecklist] = useState<VehicleCheckItem[]>([]);
+
+  // Load from persistent local storage on mount, then sync with backend
   useEffect(() => {
-    fetchVehicles();
+    adminDataStorage.getVehicles(INITIAL_VEHICLES).then((saved) => {
+      if (saved && Array.isArray(saved) && saved.length > 0) {
+        setVehicles(saved);
+      }
+      fetchVehicles();
+    });
   }, []);
 
   const fetchVehicles = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('http://localhost:5000/api/admin/fleet/vehicles');
+      const res = await fetch(getAdminApiUrl('/api/admin/fleet/vehicles'));
       if (res.ok) {
         const data = await res.json();
         if (data?.vehicles && Array.isArray(data.vehicles) && data.vehicles.length > 0) {
@@ -166,10 +185,11 @@ export default function VehicleManagementScreen() {
             nextInspection: v.nextInspection ?? (v.status === 'Maintenance' ? 'Immediate Inspection' : `${15 + index} Oct 2026`),
           }));
           setVehicles(merged);
+          adminDataStorage.saveVehicles(merged);
         }
       }
     } catch {
-      // Offline fallback: keep INITIAL_VEHICLES
+      // Offline fallback: keep current persistent vehicles
     } finally {
       setIsLoading(false);
     }
@@ -234,12 +254,16 @@ export default function VehicleManagementScreen() {
       lastUpdated: new Date(),
     };
 
-    // Optimistic UI update
-    setVehicles((prev) => [newRecord, ...prev]);
+    // UI update & persistent storage immediately
+    setVehicles((prev) => {
+      const updated = [newRecord, ...prev];
+      adminDataStorage.saveVehicles(updated);
+      return updated;
+    });
     setShowAddModal(false);
 
     try {
-      await fetch('http://localhost:5000/api/admin/fleet/vehicles', {
+      await fetch(getAdminApiUrl('/api/admin/fleet/vehicles'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRecord),
@@ -273,13 +297,15 @@ export default function VehicleManagementScreen() {
       transportType: formType,
     };
 
-    setVehicles((prev) =>
-      prev.map((v) => (v.vehicleId === selectedVehicle.vehicleId ? updated : v))
-    );
+    setVehicles((prev) => {
+      const list = prev.map((v) => (v.vehicleId === selectedVehicle.vehicleId ? updated : v));
+      adminDataStorage.saveVehicles(list);
+      return list;
+    });
     setShowEditModal(false);
 
     try {
-      await fetch('http://localhost:5000/api/admin/fleet/vehicles/update', {
+      await fetch(getAdminApiUrl('/api/admin/fleet/vehicles/update'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
@@ -302,13 +328,15 @@ export default function VehicleManagementScreen() {
       speed: newStatus === 'Maintenance' || newStatus === 'Standby' ? 0 : selectedVehicle.speed,
     };
 
-    setVehicles((prev) =>
-      prev.map((v) => (v.vehicleId === selectedVehicle.vehicleId ? updated : v))
-    );
+    setVehicles((prev) => {
+      const list = prev.map((v) => (v.vehicleId === selectedVehicle.vehicleId ? updated : v));
+      adminDataStorage.saveVehicles(list);
+      return list;
+    });
     setShowStatusModal(false);
 
     try {
-      await fetch('http://localhost:5000/api/admin/fleet/vehicles/update', {
+      await fetch(getAdminApiUrl('/api/admin/fleet/vehicles/update'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
@@ -319,11 +347,15 @@ export default function VehicleManagementScreen() {
   const handleConfirmDelete = async () => {
     if (!selectedVehicle) return;
     const targetId = selectedVehicle.vehicleId;
-    setVehicles((prev) => prev.filter((v) => v.vehicleId !== targetId));
+    setVehicles((prev) => {
+      const list = prev.filter((v) => v.vehicleId !== targetId);
+      adminDataStorage.saveVehicles(list);
+      return list;
+    });
     setShowDeleteModal(false);
 
     try {
-      await fetch('http://localhost:5000/api/admin/fleet/vehicles/delete', {
+      await fetch(getAdminApiUrl('/api/admin/fleet/vehicles/delete'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vehicleId: targetId }),
@@ -333,7 +365,80 @@ export default function VehicleManagementScreen() {
 
   const handleOpenHealth = (v: VehicleRecord) => {
     setSelectedVehicle(v);
+    setInspectHealthScore(v.healthScore ?? 94);
+    setInspectNextDate(v.nextInspection ?? '24 Oct 2026');
+    setInspectChecklist(
+      v.safetyChecklist && v.safetyChecklist.length > 0
+        ? v.safetyChecklist
+        : [
+            { system: 'Pneumatic Braking System', status: 'Optimal (Pressure 8.2 bar)', ok: true },
+            {
+              system: 'Engine & Transmission Sensors',
+              status: v.status === 'Maintenance' ? 'Warning: Fault code E-41' : 'Normal operating temperature',
+              ok: v.status !== 'Maintenance',
+            },
+            { system: 'Passenger Door Sensors & Ramp', status: 'Passed calibration', ok: true },
+            { system: 'Tire Pressure & Tread Depth', status: '8.5 mm tread (Compliant)', ok: true },
+            { system: 'Air Conditioning / Ventilation', status: 'Cooling at 22°C', ok: true },
+          ]
+    );
     setShowHealthModal(true);
+  };
+
+  const handleToggleCheckItem = (idx: number) => {
+    setInspectChecklist((prev) => {
+      const updated = [...prev];
+      const current = updated[idx];
+      const newOk = !current.ok;
+      updated[idx] = {
+        ...current,
+        ok: newOk,
+        status: newOk ? 'Inspected & Passed' : 'Warning: Attention Required (Depot Flagged)',
+      };
+      const passedCount = updated.filter((c) => c.ok).length;
+      const calcScore = Math.round((passedCount / updated.length) * 100);
+      setInspectHealthScore(calcScore);
+      return updated;
+    });
+  };
+
+  const handleSaveHealthInspection = async () => {
+    if (!selectedVehicle) return;
+    const isCriticalIssue = inspectChecklist.some(
+      (c) => !c.ok && (c.system.includes('Braking') || c.system.includes('Engine'))
+    );
+    const newStatus = isCriticalIssue && selectedVehicle.status === 'Active' ? 'Maintenance' : selectedVehicle.status;
+
+    const updated: VehicleRecord = {
+      ...selectedVehicle,
+      healthScore: inspectHealthScore,
+      nextInspection: inspectNextDate.trim() || selectedVehicle.nextInspection || '24 Oct 2026',
+      safetyChecklist: inspectChecklist,
+      status: newStatus,
+    };
+
+    setVehicles((prev) => {
+      const list = prev.map((v) => (v.vehicleId === selectedVehicle.vehicleId ? updated : v));
+      adminDataStorage.saveVehicles(list);
+      return list;
+    });
+    setSelectedVehicle(updated);
+    setShowHealthModal(false);
+
+    Alert.alert(
+      'Inspection Recorded',
+      `Vehicle #${selectedVehicle.vehicleId} health rated at ${inspectHealthScore}%.\nNext Service: ${updated.nextInspection}${newStatus === 'Maintenance' ? '\n\n⚠️ Vehicle automatically placed in Depot Maintenance due to critical safety item.' : ''}`
+    );
+
+    try {
+      await fetch(getAdminApiUrl('/api/admin/fleet/vehicles/update'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch (err) {
+      console.warn('Backend update failed:', err);
+    }
   };
 
   const getStatusColor = (st: string) => {
@@ -840,67 +945,167 @@ export default function VehicleManagementScreen() {
       {/* ================= MODAL 5: HEALTH & INSPECTION LOG ================= */}
       <Modal visible={showHealthModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalSub}>Diagnostics & Safety</Text>
-                <Text style={styles.modalTitle}>Health Log: #{selectedVehicle?.vehicleId}</Text>
+                <Text style={styles.modalSub}>Admin Safety & Health Control</Text>
+                <Text style={styles.modalTitle}>Inspect #{selectedVehicle?.vehicleId}</Text>
               </View>
               <TouchableOpacity onPress={() => setShowHealthModal(false)}>
                 <X size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.healthOverviewBanner}>
-              <View>
-                <Text style={styles.healthScoreBig}>{selectedVehicle?.healthScore ?? 94}%</Text>
-                <Text style={styles.healthScoreLabel}>Overall Safety Rating</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.healthInspectionBadge}>
-                  {selectedVehicle?.nextInspection ?? '24 Oct 2026'}
-                </Text>
-                <Text style={styles.healthScoreLabel}>Next Scheduled Service</Text>
-              </View>
-            </View>
-
-            <Text style={[styles.inputLabel, { marginTop: 12 }]}>Safety Checklist Diagnostics</Text>
-            {[
-              { system: 'Pneumatic Braking System', status: 'Optimal (Pressure 8.2 bar)', ok: true },
-              { system: 'Engine & Transmission Sensors', status: selectedVehicle?.status === 'Maintenance' ? 'Warning: Fault code E-41' : 'Normal operating temperature', ok: selectedVehicle?.status !== 'Maintenance' },
-              { system: 'Passenger Door Sensors & Ramp', status: 'Passed calibration', ok: true },
-              { system: 'Tire Pressure & Tread Depth', status: '8.5 mm tread (Compliant)', ok: true },
-              { system: 'Air Conditioning / Ventilation', status: 'Cooling at 22°C', ok: true },
-            ].map((chk, idx) => (
-              <View key={idx} style={styles.checkItem}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.checkTitle}>{chk.system}</Text>
-                  <Text style={styles.checkSub}>{chk.status}</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Score & Service Date Banner */}
+              <View style={styles.healthOverviewBanner}>
+                <View>
+                  <Text
+                    style={[
+                      styles.healthScoreBig,
+                      {
+                        color:
+                          inspectHealthScore >= 85
+                            ? '#059669'
+                            : inspectHealthScore >= 70
+                            ? '#D97706'
+                            : '#DC2626',
+                      },
+                    ]}
+                  >
+                    {inspectHealthScore}%
+                  </Text>
+                  <Text style={styles.healthScoreLabel}>Overall Safety Rating</Text>
                 </View>
-                {chk.ok ? (
-                  <CheckCircle2 size={18} color="#10b981" />
-                ) : (
-                  <AlertTriangle size={18} color="#f43f5e" />
-                )}
+                <View style={{ alignItems: 'flex-end', flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.healthInspectionBadge}>
+                    {inspectNextDate || '24 Oct 2026'}
+                  </Text>
+                  <Text style={styles.healthScoreLabel}>Next Scheduled Service</Text>
+                </View>
               </View>
-            ))}
 
-            <View style={styles.modalActions}>
+              {/* Editable Next Service Date */}
+              <Text style={[styles.inputLabel, { marginTop: 12 }]}>Next Scheduled Service Date</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={inspectNextDate}
+                onChangeText={setInspectNextDate}
+                placeholder="e.g. 28 Oct 2026 or Immediate Inspection"
+                placeholderTextColor="#94A3B8"
+              />
+
+              {/* Quick Score Adjuster */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: 10,
+                }}
+              >
+                <Text style={styles.inputLabel}>Adjust Safety Rating</Text>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <TouchableOpacity
+                    style={[styles.scorePillBtn, { backgroundColor: '#FEE2E2' }]}
+                    onPress={() => setInspectHealthScore((prev) => Math.max(0, prev - 10))}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#DC2626' }}>-10%</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.scorePillBtn, { backgroundColor: '#FEF3C7' }]}
+                    onPress={() =>
+                      setInspectHealthScore((prev) => Math.min(100, Math.max(0, prev - 5)))
+                    }
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#D97706' }}>-5%</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.scorePillBtn, { backgroundColor: '#DCFCE7' }]}
+                    onPress={() => setInspectHealthScore((prev) => Math.min(100, prev + 5))}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669' }}>+5%</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <Text style={[styles.inputLabel, { marginTop: 14 }]}>
+                Safety Checklist Diagnostics (Tap to Toggle)
+              </Text>
+              <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 8 }}>
+                Tap any system below to toggle Pass / Attention Flag:
+              </Text>
+
+              {inspectChecklist.map((chk, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    styles.checkItem,
+                    !chk.ok && { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
+                  ]}
+                  onPress={() => handleToggleCheckItem(idx)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={[styles.checkTitle, !chk.ok && { color: '#B91C1C' }]}>
+                      {chk.system}
+                    </Text>
+                    <Text style={[styles.checkSub, !chk.ok && { color: '#DC2626' }]}>
+                      {chk.status}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'center' }}>
+                    {chk.ok ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#DCFCE7',
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <CheckCircle2 size={14} color="#15803D" style={{ marginRight: 4 }} />
+                        <Text style={{ fontSize: 10.5, fontWeight: '700', color: '#15803D' }}>
+                          PASSED
+                        </Text>
+                      </View>
+                    ) : (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#FEE2E2',
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <AlertTriangle size={14} color="#DC2626" style={{ marginRight: 4 }} />
+                        <Text style={{ fontSize: 10.5, fontWeight: '700', color: '#DC2626' }}>
+                          FLAGGED
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={[styles.modalActions, { marginTop: 12 }]}>
               <TouchableOpacity
                 style={[styles.cancelBtn, { flex: 1 }]}
                 onPress={() => setShowHealthModal(false)}
               >
-                <Text style={styles.cancelBtnText}>Close</Text>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.confirmBtn, { flex: 1.2 }]}
-                onPress={() => {
-                  Alert.alert('Service Scheduled', `Depot maintenance appointment reserved for #${selectedVehicle?.vehicleId}.`);
-                  setShowHealthModal(false);
-                }}
+                style={[styles.confirmBtn, { flex: 1.5, backgroundColor: '#0F2942' }]}
+                onPress={handleSaveHealthInspection}
               >
-                <Clock size={16} color="#fff" style={{ marginRight: 6 }} />
-                <Text style={styles.confirmBtnText}>Schedule Depot Service</Text>
+                <CheckCircle2 size={16} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.confirmBtnText}>Save Inspection</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1421,5 +1626,12 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 10,
     marginTop: 1,
+  },
+  scorePillBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
