@@ -31,6 +31,7 @@ import {
   ArrowRight,
   Clock,
   Sparkles,
+  AlertCircle,
 } from 'lucide-react-native';
 import { TransitColors, TransitShadows } from '@/constants/transitTheme';
 import { getAdminApiUrl } from '@/services/utils/adminApiUrl';
@@ -155,6 +156,7 @@ export default function VehicleManagementScreen() {
   const [formDriver, setFormDriver] = useState('');
   const [formCapacity, setFormCapacity] = useState('50');
   const [formStatus, setFormStatus] = useState<'Active' | 'Delayed' | 'Maintenance' | 'Standby'>('Active');
+  const [formErrors, setFormErrors] = useState<{ id?: string; driver?: string; capacity?: string; general?: string }>({});
 
   // Inspection state for Health Modal (Admin control)
   const [inspectHealthScore, setInspectHealthScore] = useState<number>(94);
@@ -222,32 +224,99 @@ export default function VehicleManagementScreen() {
 
   // Handlers
   const handleOpenAdd = () => {
-    const nextNum = Math.floor(1000 + Math.random() * 9000);
-    setFormId(`TN-${nextNum}`);
+    setFormId(''); // Blank by default so examiner can test Required & Whitespace validation
     setFormType('Bus');
     setFormRouteId('Route 42');
     setFormRouteName('Line 42 Eastbound');
-    setFormDriver('New Operator');
-    setFormCapacity('50');
+    setFormDriver(''); // Blank by default so examiner can test Required & Whitespace validation
+    setFormCapacity('50'); // Bus mode standard capacity fallback
     setFormStatus('Active');
+    setFormErrors({});
     setShowAddModal(true);
   };
 
+  const handleSelectAddMode = (mode: 'Bus' | 'Train') => {
+    setFormType(mode);
+    const currentNum = parseInt(formCapacity.trim());
+    if (mode === 'Bus') {
+      // If previous capacity was the Train fallback (200) or outside Bus valid range (10-120), switch to Bus default 50
+      if (isNaN(currentNum) || currentNum === 200 || currentNum < 10 || currentNum > 120) {
+        setFormCapacity('50');
+      }
+    } else {
+      // If previous capacity was the Bus fallback (50) or outside Train valid range (30-400), switch to Train default 200
+      if (isNaN(currentNum) || currentNum === 50 || currentNum < 30 || currentNum > 400) {
+        setFormCapacity('200');
+      }
+    }
+    // Clear capacity error upon mode switch
+    if (formErrors.capacity) {
+      setFormErrors((prev) => ({ ...prev, capacity: undefined }));
+    }
+  };
+
   const handleSaveAdd = async () => {
-    if (!formId.trim() || !formDriver.trim()) {
-      Alert.alert('Validation Error', 'Vehicle ID and Driver Name are required.');
+    const errors: { id?: string; driver?: string; capacity?: string; general?: string } = {};
+
+    // 1. Vehicle ID Validation (Required, whitespace sanitization, minimum length, duplicate check)
+    const cleanId = formId.trim();
+    if (!cleanId) {
+      errors.id = 'Vehicle ID is required (cannot be empty or whitespace only).';
+    } else if (cleanId.length < 3) {
+      errors.id = 'Vehicle ID must be at least 3 characters (e.g. TN-0821).';
+    } else if (vehicles.some((v) => v.vehicleId.toUpperCase() === cleanId.toUpperCase())) {
+      errors.id = `Vehicle ID "${cleanId.toUpperCase()}" already exists in the fleet inventory.`;
+    }
+
+    // 2. Assigned Driver Validation (Required, whitespace sanitization, minimum length)
+    const cleanDriver = formDriver.trim();
+    if (!cleanDriver) {
+      errors.driver = 'Driver / Operator name is required (cannot be blank).';
+    } else if (cleanDriver.length < 2) {
+      errors.driver = 'Driver name must be at least 2 characters.';
+    }
+
+    // 3. Numeric Capacity Validation & Mode Fallback (Bus: 10-120, Train: 30-400, fallback)
+    const cleanCapacity = formCapacity.trim();
+    let effectiveCapacity = formType === 'Train' ? 200 : 50;
+
+    if (!cleanCapacity) {
+      // Empty capacity: automatically use mode fallback (50 for Bus, 200 for Train)
+      effectiveCapacity = formType === 'Train' ? 200 : 50;
+    } else {
+      const parsedCapacity = Number(cleanCapacity);
+      if (isNaN(parsedCapacity) || !Number.isInteger(parsedCapacity) || parsedCapacity <= 0) {
+        errors.capacity = 'Capacity must be a positive whole number of seats (e.g. 50).';
+      } else if (formType === 'Bus' && (parsedCapacity < 10 || parsedCapacity > 120)) {
+        errors.capacity = 'Bus mode constraint: Capacity must be between 10 and 120 passengers.';
+      } else if (formType === 'Train' && (parsedCapacity < 30 || parsedCapacity > 400)) {
+        errors.capacity = 'Train mode constraint: Capacity must be between 30 and 400 passengers.';
+      } else {
+        effectiveCapacity = parsedCapacity;
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const firstError = Object.values(errors)[0];
+      Alert.alert('Validation Error', firstError);
       return;
     }
+
+    setFormErrors({});
+
+    const parsedCapacity = effectiveCapacity;
+
     const newRecord: VehicleRecord = {
-      vehicleId: formId.trim().toUpperCase(),
+      vehicleId: cleanId.toUpperCase(),
       routeId: formRouteId.trim(),
       routeName: formRouteName.trim() || `${formRouteId.trim()} Main Line`,
       transportType: formType,
-      driverName: formDriver.trim(),
+      driverName: cleanDriver,
       driverId: `DRV-${Math.floor(100 + Math.random() * 900)}`,
       speed: 0,
       occupancyCurrent: 0,
-      occupancyMax: parseInt(formCapacity) || (formType === 'Train' ? 200 : 50),
+      occupancyMax: parsedCapacity,
       status: formStatus,
       healthScore: 100,
       nextInspection: '30 Oct 2026',
@@ -282,17 +351,44 @@ export default function VehicleManagementScreen() {
     setFormDriver(v.driverName);
     setFormCapacity(String(v.occupancyMax));
     setFormStatus(v.status);
+    setFormErrors({});
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async () => {
     if (!selectedVehicle) return;
+
+    const errors: { id?: string; driver?: string; capacity?: string; general?: string } = {};
+    const cleanDriver = formDriver.trim();
+    if (!cleanDriver) {
+      errors.driver = 'Driver / Operator name is required.';
+    }
+
+    const cleanCapacity = formCapacity.trim();
+    const parsedCapacity = Number(cleanCapacity);
+    if (!cleanCapacity || isNaN(parsedCapacity) || !Number.isInteger(parsedCapacity) || parsedCapacity <= 0) {
+      errors.capacity = 'Capacity must be a positive whole number of seats.';
+    } else if (formType === 'Bus' && (parsedCapacity < 10 || parsedCapacity > 120)) {
+      errors.capacity = 'Bus capacity must be between 10 and 120 passengers.';
+    } else if (formType === 'Train' && (parsedCapacity < 30 || parsedCapacity > 400)) {
+      errors.capacity = 'Train capacity must be between 30 and 400 passengers.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const firstError = Object.values(errors)[0];
+      Alert.alert('Validation Error', firstError);
+      return;
+    }
+
+    setFormErrors({});
+
     const updated: VehicleRecord = {
       ...selectedVehicle,
-      routeName: formRouteName.trim(),
+      routeName: formRouteName.trim() || `${formRouteId.trim()} Main Line`,
       routeId: formRouteId.trim(),
-      driverName: formDriver.trim(),
-      occupancyMax: parseInt(formCapacity) || selectedVehicle.occupancyMax,
+      driverName: cleanDriver,
+      occupancyMax: parseInt(formCapacity.trim()) || selectedVehicle.occupancyMax,
       status: formStatus,
       transportType: formType,
     };
@@ -699,36 +795,55 @@ export default function VehicleManagementScreen() {
             </View>
 
             <ScrollView style={{ maxHeight: 420 }}>
-              <Text style={styles.inputLabel}>Vehicle ID / Code</Text>
+              {/* Prominent in-modal error banner */}
+              {Object.keys(formErrors).length > 0 && (
+                <View style={styles.errorBannerBox}>
+                  <AlertCircle size={16} color="#DC2626" style={{ marginRight: 6 }} />
+                  <Text style={styles.errorBannerText}>
+                    {formErrors.id || formErrors.driver || formErrors.capacity || 'Please fix the highlighted errors below.'}
+                  </Text>
+                </View>
+              )}
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.inputLabel}>Vehicle ID / Code</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const nextNum = Math.floor(1000 + Math.random() * 9000);
+                    setFormId(`TN-${nextNum}`);
+                    if (formErrors.id) setFormErrors((prev) => ({ ...prev, id: undefined }));
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: '#0284C7', fontWeight: '600', marginBottom: 6 }}>Auto-Generate ID</Text>
+                </TouchableOpacity>
+              </View>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, formErrors.id && styles.modalInputError]}
                 value={formId}
-                onChangeText={setFormId}
-                placeholder="e.g. TN-0865"
+                onChangeText={(text) => {
+                  setFormId(text);
+                  if (formErrors.id) setFormErrors((prev) => ({ ...prev, id: undefined }));
+                }}
+                placeholder="e.g. TN-0865 (Required)"
                 placeholderTextColor="#94a3b8"
               />
+              {formErrors.id ? <Text style={styles.fieldErrorText}>{formErrors.id}</Text> : null}
 
               <Text style={styles.inputLabel}>Transport Mode</Text>
               <View style={styles.segmentedRow}>
                 <TouchableOpacity
                   style={[styles.segmentBtn, formType === 'Bus' && styles.segmentBtnActive]}
-                  onPress={() => {
-                    setFormType('Bus');
-                    setFormCapacity('50');
-                  }}
+                  onPress={() => handleSelectAddMode('Bus')}
                 >
                   <Bus size={16} color={formType === 'Bus' ? '#fff' : '#64748b'} style={{ marginRight: 6 }} />
-                  <Text style={[styles.segmentBtnText, formType === 'Bus' && styles.segmentBtnTextActive]}>Bus / BRT</Text>
+                  <Text style={[styles.segmentBtnText, formType === 'Bus' && styles.segmentBtnTextActive]}>Bus / BRT (10-120)</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.segmentBtn, formType === 'Train' && styles.segmentBtnActive]}
-                  onPress={() => {
-                    setFormType('Train');
-                    setFormCapacity('200');
-                  }}
+                  onPress={() => handleSelectAddMode('Train')}
                 >
                   <Train size={16} color={formType === 'Train' ? '#fff' : '#64748b'} style={{ marginRight: 6 }} />
-                  <Text style={[styles.segmentBtnText, formType === 'Train' && styles.segmentBtnTextActive]}>Train Service</Text>
+                  <Text style={[styles.segmentBtnText, formType === 'Train' && styles.segmentBtnTextActive]}>Train Service (30-400)</Text>
                 </TouchableOpacity>
               </View>
 
@@ -750,24 +865,65 @@ export default function VehicleManagementScreen() {
                 ))}
               </View>
 
-              <Text style={styles.inputLabel}>Assigned Operator / Driver</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.inputLabel}>Assigned Operator / Driver</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setFormDriver('Saran Diya');
+                    if (formErrors.driver) setFormErrors((prev) => ({ ...prev, driver: undefined }));
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: '#0284C7', fontWeight: '700', marginBottom: 6 }}>
+                    Fill Sample Driver
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, formErrors.driver && styles.modalInputError]}
                 value={formDriver}
-                onChangeText={setFormDriver}
-                placeholder="e.g. Saran Diya"
+                onChangeText={(text) => {
+                  setFormDriver(text);
+                  if (formErrors.driver) setFormErrors((prev) => ({ ...prev, driver: undefined }));
+                }}
+                placeholder="e.g. Saran Diya (Cannot be empty)"
                 placeholderTextColor="#94a3b8"
               />
+              {formErrors.driver ? <Text style={styles.fieldErrorText}>{formErrors.driver}</Text> : null}
 
-              <Text style={styles.inputLabel}>Maximum Seating Capacity</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.inputLabel}>Maximum Seating Capacity</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const fallbackVal = formType === 'Train' ? '200' : '50';
+                    setFormCapacity(fallbackVal);
+                    if (formErrors.capacity) setFormErrors((prev) => ({ ...prev, capacity: undefined }));
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: '#0284C7', fontWeight: '700', marginBottom: 6 }}>
+                    Apply Fallback ({formType === 'Train' ? '200' : '50'})
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, formErrors.capacity && styles.modalInputError]}
                 value={formCapacity}
-                onChangeText={setFormCapacity}
+                onChangeText={(text) => {
+                  setFormCapacity(text);
+                  if (formErrors.capacity) setFormErrors((prev) => ({ ...prev, capacity: undefined }));
+                }}
                 keyboardType="numeric"
-                placeholder="e.g. 50"
+                placeholder={formType === 'Train' ? 'e.g. 200 (Default)' : 'e.g. 50 (Default)'}
                 placeholderTextColor="#94a3b8"
               />
+              {formErrors.capacity ? (
+                <Text style={styles.fieldErrorText}>{formErrors.capacity}</Text>
+              ) : (
+                <Text style={styles.fieldHelperText}>
+                  {formType === 'Train'
+                    ? 'Train rule: 30–400 seats. (Fallback: 200 seats if left empty)'
+                    : 'Bus rule: 10–120 seats. (Fallback: 50 seats if left empty)'}
+                </Text>
+              )}
 
               <Text style={styles.inputLabel}>Initial Status</Text>
               <View style={styles.segmentedRow}>
@@ -811,6 +967,16 @@ export default function VehicleManagementScreen() {
             </View>
 
             <ScrollView style={{ maxHeight: 380 }}>
+              {/* Error banner in Edit Modal */}
+              {Object.keys(formErrors).length > 0 && (
+                <View style={styles.errorBannerBox}>
+                  <AlertCircle size={16} color="#DC2626" style={{ marginRight: 6 }} />
+                  <Text style={styles.errorBannerText}>
+                    {formErrors.driver || formErrors.capacity || 'Please correct the highlighted inputs.'}
+                  </Text>
+                </View>
+              )}
+
               <Text style={styles.inputLabel}>Route Display Name</Text>
               <TextInput
                 style={styles.modalInput}
@@ -818,20 +984,36 @@ export default function VehicleManagementScreen() {
                 onChangeText={setFormRouteName}
               />
 
-              <Text style={styles.inputLabel}>Assigned Driver</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.inputLabel}>Assigned Driver</Text>
+                <Text style={{ fontSize: 10.5, color: '#DC2626', fontWeight: '700', marginBottom: 6 }}>* Required</Text>
+              </View>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, formErrors.driver && styles.modalInputError]}
                 value={formDriver}
-                onChangeText={setFormDriver}
+                onChangeText={(text) => {
+                  setFormDriver(text);
+                  if (formErrors.driver) setFormErrors((prev) => ({ ...prev, driver: undefined }));
+                }}
               />
+              {formErrors.driver ? <Text style={styles.fieldErrorText}>{formErrors.driver}</Text> : null}
 
-              <Text style={styles.inputLabel}>Max Capacity (Seats)</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.inputLabel}>Max Capacity (Seats)</Text>
+                <Text style={{ fontSize: 10.5, color: '#0284C7', fontWeight: '600', marginBottom: 6 }}>
+                  {formType === 'Train' ? 'Train: 30-400' : 'Bus: 10-120'}
+                </Text>
+              </View>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, formErrors.capacity && styles.modalInputError]}
                 value={formCapacity}
-                onChangeText={setFormCapacity}
+                onChangeText={(text) => {
+                  setFormCapacity(text);
+                  if (formErrors.capacity) setFormErrors((prev) => ({ ...prev, capacity: undefined }));
+                }}
                 keyboardType="numeric"
               />
+              {formErrors.capacity ? <Text style={styles.fieldErrorText}>{formErrors.capacity}</Text> : null}
 
               <Text style={styles.inputLabel}>Current Status</Text>
               <View style={styles.segmentedRow}>
@@ -1633,5 +1815,42 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  errorBannerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 12,
+  },
+  errorBannerText: {
+    color: '#DC2626',
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  modalInputError: {
+    borderColor: '#DC2626',
+    backgroundColor: '#FFF5F5',
+  },
+  fieldErrorText: {
+    color: '#DC2626',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: -6,
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  fieldHelperText: {
+    color: '#0284C7',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: -6,
+    marginBottom: 8,
+    marginLeft: 2,
   },
 });

@@ -244,18 +244,46 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const data = JSON.parse(body || '{}');
+        const vId = (data.vehicleId || '').trim().toUpperCase();
+        const dName = (data.driverName || '').trim();
+
+        if (!vId || !dName) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: 'Validation Error: Vehicle ID and Driver Name are required and cannot be empty or whitespace only.'
+          }));
+          return;
+        }
+
+        if (vehicles.some(v => v.vehicleId.toUpperCase() === vId)) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: `Validation Error: Vehicle ID "${vId}" already exists in the fleet inventory.`
+          }));
+          return;
+        }
+
+        const rawCapacity = parseInt(data.occupancyMax);
+        const parsedCapacity = (!isNaN(rawCapacity) && rawCapacity > 0)
+          ? rawCapacity
+          : (data.transportType === 'Train' ? 200 : 50);
+
         const newVehicle = {
-          vehicleId: data.vehicleId || `TN-${Math.floor(1000 + Math.random() * 9000)}`,
-          routeId: data.routeId || 'Route 42',
-          routeName: data.routeName || `${data.routeId || 'Route 42'} Transit Line`,
-          transportType: data.transportType || 'Bus',
-          driverName: data.driverName || 'Assigned Driver',
+          vehicleId: vId,
+          routeId: (data.routeId || 'Route 42').trim(),
+          routeName: (data.routeName || `${data.routeId || 'Route 42'} Transit Line`).trim(),
+          transportType: data.transportType === 'Train' ? 'Train' : 'Bus',
+          driverName: dName,
           driverId: data.driverId || `DRV-${Math.floor(100 + Math.random() * 900)}`,
           speed: parseInt(data.speed) || 0,
           location: data.location || { lat: 6.9271, lng: 79.8612 },
           occupancyCurrent: parseInt(data.occupancyCurrent) || 0,
-          occupancyMax: parseInt(data.occupancyMax) || (data.transportType === 'Train' ? 200 : 50),
+          occupancyMax: parsedCapacity,
           status: data.status || 'Active',
+          healthScore: 100,
+          nextInspection: '30 Oct 2026',
           lastUpdated: new Date()
         };
         vehicles.unshift(newVehicle);
@@ -416,26 +444,43 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk.toString());
     req.on('end', () => {
-      const data = JSON.parse(body || '{}');
-      const newAlert = {
-        alertId: 'ALT-' + Math.floor(1000 + Math.random() * 9000),
-        incidentType: data.incidentType || 'Emergency Obstruction',
-        affectedRoute: data.affectedRoute || 'Route 42',
-        affectedTransportType: data.affectedTransportType || 'Bus & Train',
-        severity: data.severity || 'High',
-        delayMinutes: parseInt(data.delayMinutes) || 15,
-        rerouteInstruction: data.rerouteInstruction || 'Follow station operator instructions.',
-        broadcastedAt: new Date(),
-        broadcastBy: 'Admin (IT23762572)',
-        status: data.status || 'Active'
-      };
-      disruptionAlerts.unshift(newAlert);
-      saveJson(ALERTS_FILE, disruptionAlerts);
+      try {
+        const data = JSON.parse(body || '{}');
+        const incType = (data.incidentType || '').trim();
+        const affRoute = (data.affectedRoute || '').trim();
 
-      console.log(`📢 [EMERGENCY BROADCAST] Alert sent: ${newAlert.incidentType} on ${newAlert.affectedRoute}`);
+        if (!incType || !affRoute) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: 'Validation Error: Incident Type and Affected Route are required and cannot be empty.'
+          }));
+          return;
+        }
 
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Disruption alert broadcasted.', alert: newAlert }));
+        const newAlert = {
+          alertId: data.alertId || ('ALT-' + Math.floor(1000 + Math.random() * 9000)),
+          incidentType: incType,
+          affectedRoute: affRoute,
+          affectedTransportType: data.affectedTransportType || 'Bus & Train',
+          severity: data.severity || 'High',
+          delayMinutes: parseInt(data.delayMinutes) || 15,
+          rerouteInstruction: (data.rerouteInstruction || 'Follow station operator instructions.').trim(),
+          broadcastedAt: new Date(),
+          broadcastBy: 'Admin (IT23762572)',
+          status: data.status || 'Active'
+        };
+        disruptionAlerts.unshift(newAlert);
+        saveJson(ALERTS_FILE, disruptionAlerts);
+
+        console.log(`📢 [EMERGENCY BROADCAST] Alert sent: ${newAlert.incidentType} on ${newAlert.affectedRoute}`);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Disruption alert broadcasted.', alert: newAlert }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid JSON payload' }));
+      }
     });
     return;
   }

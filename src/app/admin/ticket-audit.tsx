@@ -30,6 +30,7 @@ export default function TicketAuditScreen() {
   const [selectedTicket, setSelectedTicket] = useState<TicketAuditItem | null>(null);
   const [tickets, setTickets] = useState<TicketAuditItem[]>(INITIAL_TICKET_AUDITS);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [auditBanner, setAuditBanner] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTickets();
@@ -85,6 +86,9 @@ export default function TicketAuditScreen() {
         anomalyReason: note ?? selectedTicket.anomalyReason,
       });
     }
+
+    setAuditBanner(`Decision Saved: Marked as ${newStatus.toUpperCase()}`);
+    setTimeout(() => setAuditBanner(null), 3500);
 
     Alert.alert(
       'Audit Decision Saved',
@@ -234,6 +238,13 @@ export default function TicketAuditScreen() {
               </View>
 
               <View style={styles.modalBody}>
+                {auditBanner && (
+                  <View style={{ backgroundColor: '#DCFCE7', borderRadius: 8, padding: 8, marginBottom: 12, borderWidth: 1, borderColor: '#86EFAC' }}>
+                    <Text style={{ color: '#166534', fontSize: 12, fontWeight: '700', textAlign: 'center' }}>
+                      ✓ {auditBanner}
+                    </Text>
+                  </View>
+                )}
                 <Text style={styles.modalLabel}>Ticket Reference ID</Text>
                 <Text style={styles.modalValueHigh}>{selectedTicket.ticketId}</Text>
 

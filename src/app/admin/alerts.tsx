@@ -27,6 +27,7 @@ import {
   SlidersHorizontal,
   Flame,
   RefreshCw,
+  AlertCircle,
 } from 'lucide-react-native';
 import { getAdminApiUrl } from '@/services/utils/adminApiUrl';
 import { adminDataStorage } from '@/services/storage/adminDataStorage';
@@ -100,6 +101,7 @@ export default function DisruptionAlertScreen() {
   const [delayMinutes, setDelayMinutes] = useState('15');
   const [rerouteText, setRerouteText] = useState('Follow station supervisor instructions. Reroute via Bypass.');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [formErrors, setFormErrors] = useState<{ incident?: string; route?: string; delay?: string }>({});
 
   // Load from persistent local storage on mount, then poll backend
   useEffect(() => {
@@ -156,23 +158,48 @@ export default function DisruptionAlertScreen() {
     setSeverity(sev);
     setDelayMinutes(mins);
     setRerouteText(advice);
+    setFormErrors({});
   };
 
   // ================= CRUD 1: CREATE (BROADCAST) =================
   const handleOpenCompose = () => {
-    setIncidentType('Road Obstruction & Maintenance');
-    setAffectedRoute('Route 42 Eastbound');
+    setIncidentType(''); // Blank so user can test validation or type custom title
+    setAffectedRoute('Route 42 Main Line');
     setSeverity('High');
     setDelayMinutes('15');
     setRerouteText('Reroute via Station Road Bypass. Expect delays.');
+    setFormErrors({});
     setShowComposeModal(true);
   };
 
   const handleTriggerBroadcastConfirm = () => {
-    if (!incidentType.trim() || !affectedRoute.trim()) {
-      Alert.alert('Missing Field', 'Please provide an incident title and affected route.');
+    const errors: { incident?: string; route?: string; delay?: string } = {};
+
+    const cleanTitle = incidentType.trim();
+    if (!cleanTitle) {
+      errors.incident = 'Incident reason / title is required (cannot be blank).';
+    } else if (cleanTitle.length < 3) {
+      errors.incident = 'Incident title must be at least 3 characters.';
+    }
+
+    const cleanRoute = affectedRoute.trim();
+    if (!cleanRoute) {
+      errors.route = 'Affected transit route is required.';
+    }
+
+    const d = Number(delayMinutes.trim());
+    if (!delayMinutes.trim() || isNaN(d) || !Number.isInteger(d) || d < 0 || d > 360) {
+      errors.delay = 'Delay must be a valid number of minutes (0 to 360).';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const firstError = Object.values(errors)[0];
+      Alert.alert('Validation Error', firstError);
       return;
     }
+
+    setFormErrors({});
     setShowComposeModal(false);
     setShowConfirmModal(true);
   };
@@ -215,7 +242,6 @@ export default function DisruptionAlertScreen() {
     } catch {}
   };
 
-  // ================= CRUD 2: UPDATE =================
   const handleOpenEdit = (a: DisruptionAlert) => {
     setSelectedAlert(a);
     setIncidentType(a.incidentType);
@@ -223,17 +249,42 @@ export default function DisruptionAlertScreen() {
     setSeverity(a.severity);
     setDelayMinutes(String(a.delayMinutes));
     setRerouteText(a.rerouteText || '');
+    setFormErrors({});
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async () => {
     if (!selectedAlert) return;
+
+    const errors: { incident?: string; route?: string; delay?: string } = {};
+    const cleanTitle = incidentType.trim();
+    if (!cleanTitle) {
+      errors.incident = 'Incident title is required.';
+    }
+    const cleanRoute = affectedRoute.trim();
+    if (!cleanRoute) {
+      errors.route = 'Affected route is required.';
+    }
+    const d = Number(delayMinutes.trim());
+    if (!delayMinutes.trim() || isNaN(d) || !Number.isInteger(d) || d < 0 || d > 360) {
+      errors.delay = 'Delay must be a valid number of minutes (0 to 360).';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const firstError = Object.values(errors)[0];
+      Alert.alert('Validation Error', firstError);
+      return;
+    }
+
+    setFormErrors({});
+
     const updated: DisruptionAlert = {
       ...selectedAlert,
-      incidentType: incidentType.trim(),
-      affectedRoute: affectedRoute.trim(),
+      incidentType: cleanTitle,
+      affectedRoute: cleanRoute,
       severity,
-      delayMinutes: parseInt(delayMinutes) || selectedAlert.delayMinutes,
+      delayMinutes: parseInt(delayMinutes.trim()) || 0,
       rerouteText: rerouteText.trim(),
     };
 
@@ -560,14 +611,24 @@ export default function DisruptionAlertScreen() {
             </View>
 
             <ScrollView style={{ maxHeight: 420 }}>
+              {/* In-modal Error Banner */}
+              {Object.keys(formErrors).length > 0 && (
+                <View style={styles.errorBannerBox}>
+                  <AlertCircle size={16} color="#DC2626" style={{ marginRight: 6 }} />
+                  <Text style={styles.errorBannerText}>
+                    {formErrors.incident || formErrors.route || formErrors.delay || 'Please correct the highlighted fields.'}
+                  </Text>
+                </View>
+              )}
+
               {/* Presets Row for Fast Admin Response */}
               <Text style={styles.inputLabel}>Quick Incident Presets</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
                 {[
-                  { label: '🚧 Road Obstruction', title: 'Major Road Obstruction & Work', route: 'Route 42 Eastbound', sev: 'High' as const, mins: '20', advice: 'Station Road Bypass in effect.' },
-                  { label: '⚡ Signal Power Loss', title: 'Intermittent Signal Fault', route: 'Route 18 Express', sev: 'Medium' as const, mins: '15', advice: 'Trains running at reduced speed.' },
-                  { label: '🌧️ Heavy Rain Delay', title: 'Monsoon Flash Flood Delay', route: 'Route 105 BRT Corridor', sev: 'High' as const, mins: '25', advice: 'Expect widespread delays.' },
-                  { label: '🔧 Bus Breakdown', title: 'Mechanical Vehicle Defect', route: 'Route 42 Westbound', sev: 'Low' as const, mins: '10', advice: 'Backup bus dispatched.' },
+                  { label: '🚧 Road Obstruction', title: 'Major Road Obstruction & Work', route: 'Route 42 Main Line', sev: 'High' as const, mins: '20', advice: 'Station Road Bypass in effect.' },
+                  { label: '⚡ Signal Power Loss', title: 'Intermittent Signal Fault', route: 'Route 18 Main Line', sev: 'Medium' as const, mins: '15', advice: 'Trains running at reduced speed.' },
+                  { label: '🌧️ Heavy Rain Delay', title: 'Monsoon Flash Flood Delay', route: 'Route 105 Main Line', sev: 'High' as const, mins: '25', advice: 'Expect widespread delays.' },
+                  { label: '🔧 Bus Breakdown', title: 'Mechanical Vehicle Defect', route: 'Route 42 Main Line', sev: 'Low' as const, mins: '10', advice: 'Backup bus dispatched.' },
                 ].map((preset, idx) => (
                   <TouchableOpacity
                     key={idx}
@@ -579,14 +640,21 @@ export default function DisruptionAlertScreen() {
                 ))}
               </ScrollView>
 
-              <Text style={styles.inputLabel}>Incident Reason / Title</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.inputLabel}>Incident Reason / Title</Text>
+                <Text style={{ fontSize: 10.5, color: '#DC2626', fontWeight: '700', marginBottom: 6 }}>* Required</Text>
+              </View>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, formErrors.incident && styles.modalInputError]}
                 value={incidentType}
-                onChangeText={setIncidentType}
-                placeholder="e.g. Broken Track or Flooding"
+                onChangeText={(text) => {
+                  setIncidentType(text);
+                  if (formErrors.incident) setFormErrors((prev) => ({ ...prev, incident: undefined }));
+                }}
+                placeholder="e.g. Broken Track or Flooding (Required)"
                 placeholderTextColor="#64748b"
               />
+              {formErrors.incident ? <Text style={styles.fieldErrorText}>{formErrors.incident}</Text> : null}
 
               <Text style={styles.inputLabel}>Affected Transport Route</Text>
               <View style={styles.segmentedRow}>
@@ -594,12 +662,16 @@ export default function DisruptionAlertScreen() {
                   <TouchableOpacity
                     key={r}
                     style={[styles.segmentBtn, affectedRoute.includes(r) && styles.segmentBtnActive]}
-                    onPress={() => setAffectedRoute(`${r} Main Line`)}
+                    onPress={() => {
+                      setAffectedRoute(`${r} Main Line`);
+                      if (formErrors.route) setFormErrors((prev) => ({ ...prev, route: undefined }));
+                    }}
                   >
                     <Text style={[styles.segmentBtnText, affectedRoute.includes(r) && styles.segmentBtnTextActive]}>{r}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
+              {formErrors.route ? <Text style={styles.fieldErrorText}>{formErrors.route}</Text> : null}
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
                 <View style={{ flex: 1 }}>
@@ -617,16 +689,20 @@ export default function DisruptionAlertScreen() {
                   </View>
                 </View>
 
-                <View style={{ width: 90 }}>
+                <View style={{ width: 95 }}>
                   <Text style={styles.inputLabel}>Delay (+m)</Text>
                   <TextInput
-                    style={styles.modalInput}
+                    style={[styles.modalInput, formErrors.delay && styles.modalInputError]}
                     value={delayMinutes}
-                    onChangeText={setDelayMinutes}
+                    onChangeText={(text) => {
+                      setDelayMinutes(text);
+                      if (formErrors.delay) setFormErrors((prev) => ({ ...prev, delay: undefined }));
+                    }}
                     keyboardType="numeric"
                     placeholder="15"
                     placeholderTextColor="#64748b"
                   />
+                  {formErrors.delay ? <Text style={styles.fieldErrorText}>{formErrors.delay}</Text> : null}
                 </View>
               </View>
 
@@ -1263,5 +1339,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 13,
+  },
+  errorBannerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 12,
+  },
+  errorBannerText: {
+    color: '#DC2626',
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  modalInputError: {
+    borderColor: '#DC2626',
+    backgroundColor: '#FFF5F5',
+  },
+  fieldErrorText: {
+    color: '#DC2626',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: -4,
+    marginBottom: 8,
+    marginLeft: 2,
   },
 });
