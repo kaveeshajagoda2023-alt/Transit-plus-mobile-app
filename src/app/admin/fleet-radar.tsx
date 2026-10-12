@@ -1,43 +1,205 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Bus, Navigation, User, Gauge, Users, BatteryCharging, Radio, X, ChevronRight } from 'lucide-react-native';
+import { Navigation, User, Gauge, Users, ShieldCheck, Radio, X, ChevronRight, RefreshCw } from 'lucide-react-native';
+import { AdminFleetRadarMap, FleetVehicleLocation } from '@/components/admin/AdminFleetRadarMap';
+import { getAdminApiUrl } from '@/services/utils/adminApiUrl';
+import { adminDataStorage } from '@/services/storage/adminDataStorage';
 
-const { width, height } = Dimensions.get('window');
+// High-fidelity fallback vehicles with real Colombo coordinates
+const DEFAULT_FALLBACK_VEHICLES: FleetVehicleLocation[] = [
+  {
+    vehicleId: 'TN-0821',
+    routeId: 'Route 42',
+    routeName: 'Line 42 Eastbound (Pettah - Malabe)',
+    transportType: 'Bus',
+    driverName: 'Saran Diya',
+    driverId: 'DRV-401',
+    speed: 42,
+    location: { lat: 6.9271, lng: 79.8612 },
+    occupancyCurrent: 36,
+    occupancyMax: 50,
+    status: 'Active',
+    healthScore: 94,
+    nextInspection: '24 Oct 2026',
+  },
+  {
+    vehicleId: 'TN-0824',
+    routeId: 'Route 42',
+    routeName: 'Line 42 Eastbound (Market St to Malabe)',
+    transportType: 'Bus',
+    driverName: 'Kavithushan B.',
+    driverId: 'DRV-102',
+    speed: 18,
+    location: { lat: 6.9147, lng: 79.8732 },
+    occupancyCurrent: 48,
+    occupancyMax: 50,
+    status: 'Delayed',
+    healthScore: 82,
+    nextInspection: '19 Oct 2026',
+  },
+  {
+    vehicleId: 'TN-0830',
+    routeId: 'Route 18',
+    routeName: 'Route 18 Express Train',
+    transportType: 'Train',
+    driverName: 'Anura Bandara',
+    driverId: 'DRV-809',
+    speed: 65,
+    location: { lat: 6.9344, lng: 79.8500 },
+    occupancyCurrent: 120,
+    occupancyMax: 200,
+    status: 'Active',
+    healthScore: 98,
+    nextInspection: '28 Oct 2026',
+  },
+  {
+    vehicleId: 'TN-0842',
+    routeId: 'Route 105',
+    routeName: 'Route 105 BRT Bus',
+    transportType: 'Bus',
+    driverName: 'Nimal Perera',
+    driverId: 'DRV-304',
+    speed: 0,
+    location: { lat: 6.9011, lng: 79.8655 },
+    occupancyCurrent: 0,
+    occupancyMax: 50,
+    status: 'Maintenance',
+    healthScore: 64,
+    nextInspection: 'Immediate Inspection',
+  },
+  {
+    vehicleId: 'TN-0855',
+    routeId: 'Route 42',
+    routeName: 'Line 42 Westbound',
+    transportType: 'Bus',
+    driverName: 'Kamal Silva',
+    driverId: 'DRV-220',
+    speed: 38,
+    location: { lat: 6.9200, lng: 79.8800 },
+    occupancyCurrent: 24,
+    occupancyMax: 50,
+    status: 'Active',
+    healthScore: 91,
+    nextInspection: '22 Oct 2026',
+  },
+];
 
 export default function FleetRadarScreen() {
   const router = useRouter();
   const [filterRoute, setFilterRoute] = useState('All');
-  const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<FleetVehicleLocation | null>(null);
+  const [vehicles, setVehicles] = useState<FleetVehicleLocation[]>(DEFAULT_FALLBACK_VEHICLES);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastSyncText, setLastSyncText] = useState('Syncing...');
 
-  const vehicles = [
-    { id: 'TN-0821', label: 'TN-0821', route: 'Route 42', type: 'Bus', top: '35%', left: '42%', status: 'Active', driver: 'Saran Diya', speed: 42, occupancy: 36 },
-    { id: 'TN-0824', label: 'TN-0824', route: 'Route 42', type: 'Bus', top: '55%', left: '68%', status: 'Delayed', driver: 'Kavithushan B.', speed: 18, occupancy: 48 },
-    { id: 'TN-0830', label: 'TN-0830', route: 'Route 18', type: 'Train', top: '25%', left: '25%', status: 'Active', driver: 'Anura Bandara', speed: 65, occupancy: 120 },
-    { id: 'TN-0842', label: 'TN-0842', route: 'Route 105', type: 'Bus', top: '70%', left: '30%', status: 'Maintenance', driver: 'Nimal Perera', speed: 0, occupancy: 0 },
-    { id: 'TN-0855', label: 'TN-0855', route: 'Route 42', type: 'Bus', top: '45%', left: '50%', status: 'Active', driver: 'Kamal Silva', speed: 38, occupancy: 24 }
-  ];
+  const fetchFleetVehicles = useCallback(async (silent = false) => {
+    try {
+      if (!silent) setIsRefreshing(true);
+      const res = await fetch(getAdminApiUrl('/api/admin/fleet/vehicles'));
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.vehicles && Array.isArray(data.vehicles) && data.vehicles.length > 0) {
+          const mapped: FleetVehicleLocation[] = data.vehicles.map((v: any) => ({
+            vehicleId: v.vehicleId,
+            routeId: v.routeId || 'Route 42',
+            routeName: v.routeName || `${v.routeId || 'Transit'} Line`,
+            transportType: v.transportType === 'Train' ? 'Train' : 'Bus',
+            driverName: v.driverName || 'Assigned Driver',
+            driverId: v.driverId || 'DRV-001',
+            speed: Number(v.speed) || 0,
+            location: {
+              lat: Number(v.location?.lat) || 6.9271,
+              lng: Number(v.location?.lng) || 79.8612,
+            },
+            occupancyCurrent: Number(v.occupancyCurrent) || 0,
+            occupancyMax: Number(v.occupancyMax) || 50,
+            status: v.status || 'Active',
+            healthScore: v.healthScore || 90,
+            nextInspection: v.nextInspection || 'Nominal',
+          }));
+          setVehicles(mapped);
+          setLastSyncText(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        }
+      }
+    } catch {
+      // Offline fallback
+      try {
+        const local = await adminDataStorage.getVehicles([]);
+        if (Array.isArray(local) && local.length > 0) {
+          const mapped: FleetVehicleLocation[] = local.map((v: any) => ({
+            vehicleId: v.vehicleId,
+            routeId: v.routeId || 'Route 42',
+            routeName: v.routeName || `${v.routeId || 'Transit'} Line`,
+            transportType: v.transportType === 'Train' ? 'Train' : 'Bus',
+            driverName: v.driverName || 'Assigned Driver',
+            driverId: v.driverId || 'DRV-001',
+            speed: Number(v.speed) || 0,
+            location: {
+              lat: Number(v.location?.lat) || 6.9271,
+              lng: Number(v.location?.lng) || 79.8612,
+            },
+            occupancyCurrent: Number(v.occupancyCurrent) || 0,
+            occupancyMax: Number(v.occupancyMax) || 50,
+            status: v.status || 'Active',
+            healthScore: v.healthScore || 90,
+            nextInspection: v.nextInspection || 'Nominal',
+          }));
+          setVehicles(mapped);
+        }
+      } catch {}
+    } finally {
+      if (!silent) setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFleetVehicles();
+    const interval = setInterval(() => {
+      fetchFleetVehicles(true);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [fetchFleetVehicles]);
 
   const filteredVehicles = filterRoute === 'All' 
     ? vehicles 
-    : vehicles.filter(v => v.route === filterRoute);
+    : vehicles.filter(v => v.routeId === filterRoute);
+
+  const availableRoutes = ['All', ...Array.from(new Set(vehicles.map(v => v.routeId).filter(Boolean)))];
+
+  const activeCount = vehicles.filter(v => v.status === 'Active').length;
 
   return (
     <View style={styles.container}>
+      {/* Header with Real Live GPS Badge */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerSubtitle}>Real-Time Spatial Telemetry Tracking</Text>
           <Text style={styles.headerTitle}>Live Fleet Radar</Text>
         </View>
-        <View style={styles.activeBadge}>
-          <Radio size={14} color="#10b981" />
-          <Text style={styles.activeBadgeText}> 5 Active Nodes</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={styles.activeBadge}>
+            <Radio size={13} color="#059669" />
+            <Text style={styles.activeBadgeText}>{activeCount} Active Nodes</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={() => fetchFleetVehicles(false)}
+            disabled={isRefreshing}
+            accessibilityLabel="Refresh fleet GPS telemetry"
+          >
+            {isRefreshing ? (
+              <ActivityIndicator size="small" color="#0284C7" />
+            ) : (
+              <RefreshCw size={15} color="#64748B" />
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Filter Chips */}
+      {/* Route Filter Chips */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chipRow}>
-        {['All', 'Route 42', 'Route 18', 'Route 105'].map((r) => (
+        {availableRoutes.map((r) => (
           <TouchableOpacity
             key={r}
             style={[styles.chip, filterRoute === r && styles.chipActive]}
@@ -48,44 +210,14 @@ export default function FleetRadarScreen() {
         ))}
       </ScrollView>
 
-      {/* Spatial Map / Radar Simulation */}
-      <View style={styles.radarContainer}>
-        {/* Map Grid Road Lines */}
-        <View style={[styles.roadLine, { top: '45%', left: 0, width: '100%', height: 2 }]} />
-        <View style={[styles.roadLine, { top: 0, left: '48%', width: 2, height: '100%' }]} />
-
-        {/* Vehicle Markers */}
-        {filteredVehicles.map((v) => {
-          const isDelayed = v.status === 'Delayed';
-          const isMaintenance = v.status === 'Maintenance';
-          const isSelected = selectedVehicle?.id === v.id;
-          
-          return (
-            <TouchableOpacity
-              key={v.id}
-              style={[
-                styles.vehicleMarker,
-                { top: v.top as any, left: v.left as any },
-                isDelayed && styles.markerDelayed,
-                isMaintenance && styles.markerMaintenance,
-                isSelected && styles.markerSelected
-              ]}
-              onPress={() => setSelectedVehicle({
-                id: v.id,
-                routeId: v.route,
-                routeName: `${v.route} (${v.type})`,
-                driverName: v.driver,
-                speed: v.speed,
-                occupancyCurrent: v.occupancy,
-                occupancyMax: v.type === 'Train' ? 200 : 50,
-                status: v.status
-              })}
-            >
-              <Bus size={12} color="#fff" />
-              <Text style={styles.markerText}>{v.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* Real Map Component (Interactive OpenStreetMap / Google Maps) */}
+      <View style={styles.mapContainer}>
+        <AdminFleetRadarMap
+          vehicles={filteredVehicles}
+          selectedVehicle={selectedVehicle}
+          onSelectVehicle={setSelectedVehicle}
+          filterRoute={filterRoute}
+        />
       </View>
 
       {/* Pull-Up Telemetry Bottom Sheet */}
@@ -93,16 +225,30 @@ export default function FleetRadarScreen() {
         <View style={styles.bottomSheet}>
           <View style={styles.sheetHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={styles.sheetTitle}>#{selectedVehicle.id}</Text>
+              <Text style={styles.sheetTitle}>#{selectedVehicle.vehicleId}</Text>
               <View style={[
                 styles.statusBadge, 
-                { backgroundColor: selectedVehicle.status === 'Delayed' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)' }
+                { 
+                  backgroundColor: 
+                    selectedVehicle.status === 'Delayed' 
+                      ? '#FEF3C7' 
+                      : selectedVehicle.status === 'Maintenance'
+                      ? '#FEE2E2'
+                      : '#DCFCE7' 
+                }
               ]}>
                 <Text style={[
                   styles.statusBadgeText,
-                  { color: selectedVehicle.status === 'Delayed' ? '#f59e0b' : '#10b981' }
+                  { 
+                    color: 
+                      selectedVehicle.status === 'Delayed' 
+                        ? '#B45309' 
+                        : selectedVehicle.status === 'Maintenance'
+                        ? '#DC2626'
+                        : '#15803D' 
+                  }
                 ]}>
-                  {selectedVehicle.status}
+                  {selectedVehicle.status.toUpperCase()}
                 </Text>
               </View>
             </View>
@@ -131,29 +277,31 @@ export default function FleetRadarScreen() {
             </View>
 
             <View style={styles.telemetryCard}>
-              <BatteryCharging size={16} color="#f59e0b" style={styles.telemetryIcon} />
-              <Text style={styles.telemetryVal}>82%</Text>
-              <Text style={styles.telemetryLabel}>EV Battery</Text>
+              <ShieldCheck size={16} color="#6366f1" style={styles.telemetryIcon} />
+              <Text style={styles.telemetryVal}>{selectedVehicle.healthScore || 92}%</Text>
+              <Text style={styles.telemetryLabel}>Health Rating</Text>
             </View>
           </View>
 
           <View style={styles.driverInfoRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <User size={14} color="#94a3b8" />
+              <User size={14} color="#64748B" />
               <Text style={styles.driverInfoText}>
-                Assigned Driver: <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{selectedVehicle.driverName}</Text>
+                Operator: <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{selectedVehicle.driverName}</Text>
               </Text>
             </View>
-            <Text style={styles.gpsText}>GPS Synced</Text>
+            <Text style={styles.gpsText}>
+              GPS {selectedVehicle.location.lat.toFixed(4)}°N, {selectedVehicle.location.lng.toFixed(4)}°E
+            </Text>
           </View>
 
           <TouchableOpacity
             style={styles.manageFleetBtn}
             onPress={() => router.push('/admin/vehicles')}
-            accessibilityLabel={`Manage vehicle ${selectedVehicle.id} in fleet inventory`}
+            accessibilityLabel={`Manage vehicle ${selectedVehicle.vehicleId} in fleet inventory`}
           >
-            <Text style={styles.manageFleetBtnText}>Manage in Fleet Inventory</Text>
-            <ChevronRight size={16} color="#0ea5e9" />
+            <Text style={styles.manageFleetBtnText}>Manage Unit in Fleet Inventory</Text>
+            <ChevronRight size={16} color="#0284C7" />
           </TouchableOpacity>
         </View>
       )}
@@ -172,13 +320,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 10,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   headerSubtitle: {
     fontSize: 11,
     color: '#0284C7',
     fontWeight: '700',
     textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   headerTitle: {
     fontSize: 22,
@@ -193,8 +342,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#A7F3D0',
     borderRadius: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
   },
   activeBadgeText: {
     color: '#059669',
@@ -202,9 +351,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 4,
   },
+  refreshBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   chipScroll: {
-    maxHeight: 40,
-    marginBottom: 14,
+    maxHeight: 38,
+    marginBottom: 12,
   },
   chipRow: {
     flexDirection: 'row',
@@ -212,9 +371,9 @@ const styles = StyleSheet.create({
   },
   chip: {
     backgroundColor: '#FFFFFF',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 13,
+    borderRadius: 18,
     marginRight: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -225,58 +384,18 @@ const styles = StyleSheet.create({
   },
   chipText: {
     color: '#64748B',
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '600',
   },
   chipTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
   },
-  radarContainer: {
+  mapContainer: {
     flex: 1,
-    backgroundColor: '#E0F2FE',
     borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: '#BAE6FD',
     overflow: 'hidden',
-    position: 'relative',
-    marginBottom: 16,
-  },
-  roadLine: {
-    position: 'absolute',
-    backgroundColor: '#BAE6FD',
-  },
-  vehicleMarker: {
-    position: 'absolute',
-    backgroundColor: '#0284C7',
-    paddingVertical: 5,
-    paddingHorizontal: 9,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#0284C7',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  markerDelayed: {
-    backgroundColor: '#D97706',
-    shadowColor: '#D97706',
-  },
-  markerMaintenance: {
-    backgroundColor: '#E11D48',
-    shadowColor: '#E11D48',
-  },
-  markerSelected: {
-    borderWidth: 2,
-    borderColor: '#0F172A',
-  },
-  markerText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-    marginLeft: 4,
+    marginBottom: 12,
   },
   bottomSheet: {
     backgroundColor: '#FFFFFF',
@@ -290,15 +409,16 @@ const styles = StyleSheet.create({
     right: 16,
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.15,
+    shadowRadius: 18,
+    elevation: 10,
+    zIndex: 50,
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   sheetTitle: {
     fontSize: 18,
@@ -309,16 +429,16 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingVertical: 2,
     paddingHorizontal: 8,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   statusBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '800',
   },
   routeInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   routeInfoText: {
     color: '#64748B',
@@ -329,7 +449,7 @@ const styles = StyleSheet.create({
   metricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   telemetryCard: {
     backgroundColor: '#F8FAFC',
@@ -357,7 +477,7 @@ const styles = StyleSheet.create({
   driverInfoRow: {
     backgroundColor: '#F8FAFC',
     borderRadius: 10,
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -367,13 +487,13 @@ const styles = StyleSheet.create({
   },
   driverInfoText: {
     color: '#334155',
-    fontSize: 12,
+    fontSize: 11.5,
     marginLeft: 6,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   gpsText: {
-    color: '#059669',
-    fontSize: 11,
+    color: '#0284C7',
+    fontSize: 10.5,
     fontWeight: '700',
   },
   manageFleetBtn: {
