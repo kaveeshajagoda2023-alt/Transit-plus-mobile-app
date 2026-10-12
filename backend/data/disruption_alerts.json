@@ -1,0 +1,26 @@
+[
+  {
+    "alertId": "ALT-5989",
+    "incidentType": "Road Obstruction & Maintenance",
+    "affectedRoute": "Route 42 Eastbound",
+    "affectedTransportType": "Bus & Train",
+    "severity": "High",
+    "delayMinutes": 15,
+    "rerouteInstruction": "Reroute via Station Road Bypass. Expect delays.",
+    "broadcastedAt": "2026-10-12T00:11:48.314Z",
+    "broadcastBy": "Admin (IT23762572)",
+    "status": "Active"
+  },
+  {
+    "alertId": "ALT-1092",
+    "incidentType": "Major Track Maintenance & Water Main Burst",
+    "affectedRoute": "Route 42 Eastbound (Central to University)",
+    "affectedTransportType": "Bus & Train",
+    "severity": "High",
+    "delayMinutes": 15,
+    "rerouteInstruction": "Reroute via Station Road Bypass",
+    "broadcastedAt": "2026-10-11T23:01:24.877Z",
+    "broadcastBy": "Admin (IT23762572)",
+    "status": "Active"
+  }
+]

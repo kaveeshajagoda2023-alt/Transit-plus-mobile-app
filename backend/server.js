@@ -178,8 +178,35 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 3d. Delete / Decommission Vehicle from Fleet
+  if ((pathname === '/api/admin/fleet/vehicles/delete' || (pathname.startsWith('/api/admin/fleet/vehicles/') && req.method === 'DELETE')) && (req.method === 'DELETE' || req.method === 'POST')) {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = body ? JSON.parse(body) : {};
+        const targetId = data.vehicleId || pathname.split('/').pop();
+        const initialLen = vehicles.length;
+        vehicles = vehicles.filter(v => v.vehicleId !== targetId);
+        if (vehicles.length === initialLen) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Vehicle not found' }));
+          return;
+        }
+        saveJson(VEHICLES_FILE, vehicles);
+        console.log(`🗑️ [FLEET MANAGEMENT] Decommissioned vehicle: ${targetId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Vehicle decommissioned from fleet.' }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Error processing request' }));
+      }
+    });
+    return;
+  }
+
   // 3c. Update Vehicle Details or Status
-  if ((pathname.startsWith('/api/admin/fleet/vehicles/') || pathname === '/api/admin/fleet/vehicles/update') && (req.method === 'PUT' || req.method === 'POST')) {
+  if ((pathname.startsWith('/api/admin/fleet/vehicles/') || pathname === '/api/admin/fleet/vehicles/update') && pathname !== '/api/admin/fleet/vehicles/delete' && (req.method === 'PUT' || req.method === 'POST')) {
     let body = '';
     req.on('data', chunk => body += chunk.toString());
     req.on('end', () => {
@@ -204,33 +231,6 @@ const server = http.createServer((req, res) => {
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Invalid JSON payload' }));
-      }
-    });
-    return;
-  }
-
-  // 3d. Delete / Decommission Vehicle from Fleet
-  if ((pathname.startsWith('/api/admin/fleet/vehicles/') || pathname === '/api/admin/fleet/vehicles/delete') && (req.method === 'DELETE' || req.method === 'POST')) {
-    let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', () => {
-      try {
-        const data = body ? JSON.parse(body) : {};
-        const targetId = data.vehicleId || pathname.split('/').pop();
-        const initialLen = vehicles.length;
-        vehicles = vehicles.filter(v => v.vehicleId !== targetId);
-        if (vehicles.length === initialLen) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Vehicle not found' }));
-          return;
-        }
-        saveJson(VEHICLES_FILE, vehicles);
-        console.log(`🗑️ [FLEET MANAGEMENT] Decommissioned vehicle: ${targetId}`);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, message: 'Vehicle decommissioned from fleet.' }));
-      } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Error processing request' }));
       }
     });
     return;
@@ -347,8 +347,35 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 5c. Delete / Withdraw Disruption Alert (CRUD 2: Delete)
+  if ((pathname === '/api/admin/disruptions/delete' || (pathname.startsWith('/api/admin/disruptions/') && req.method === 'DELETE')) && (req.method === 'DELETE' || req.method === 'POST')) {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const data = body ? JSON.parse(body) : {};
+        const targetId = data.alertId || pathname.split('/').pop();
+        const initialLen = disruptionAlerts.length;
+        disruptionAlerts = disruptionAlerts.filter(a => a.alertId !== targetId);
+        if (disruptionAlerts.length === initialLen) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Alert not found' }));
+          return;
+        }
+        saveJson(ALERTS_FILE, disruptionAlerts);
+        console.log(`🗑️ [DISRUPTION WITHDRAWN] Withdrew alert: ${targetId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Disruption alert withdrawn from broadcast.' }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Error processing delete' }));
+      }
+    });
+    return;
+  }
+
   // 5b. Update Disruption Alert (CRUD 2: Update)
-  if ((pathname.startsWith('/api/admin/disruptions/update') || pathname.match(/\/api\/admin\/disruptions\/ALT-\d+/)) && (req.method === 'PUT' || req.method === 'POST')) {
+  if ((pathname.startsWith('/api/admin/disruptions/update') || pathname.match(/\/api\/admin\/disruptions\/ALT-\d+/)) && pathname !== '/api/admin/disruptions/delete' && (req.method === 'PUT' || req.method === 'POST')) {
     let body = '';
     req.on('data', chunk => body += chunk.toString());
     req.on('end', () => {
@@ -373,33 +400,6 @@ const server = http.createServer((req, res) => {
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Invalid payload' }));
-      }
-    });
-    return;
-  }
-
-  // 5c. Delete / Withdraw Disruption Alert (CRUD 2: Delete)
-  if ((pathname.startsWith('/api/admin/disruptions/delete') || pathname.match(/\/api\/admin\/disruptions\/ALT-\d+/)) && (req.method === 'DELETE' || req.method === 'POST')) {
-    let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', () => {
-      try {
-        const data = body ? JSON.parse(body) : {};
-        const targetId = data.alertId || pathname.split('/').pop();
-        const initialLen = disruptionAlerts.length;
-        disruptionAlerts = disruptionAlerts.filter(a => a.alertId !== targetId);
-        if (disruptionAlerts.length === initialLen) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Alert not found' }));
-          return;
-        }
-        saveJson(ALERTS_FILE, disruptionAlerts);
-        console.log(`🗑️ [DISRUPTION WITHDRAWN] Withdrew alert: ${targetId}`);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, message: 'Disruption alert withdrawn from broadcast.' }));
-      } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Error processing delete' }));
       }
     });
     return;

@@ -1,0 +1,114 @@
+[
+  {
+    "vehicleId": "TN-8431",
+    "routeId": "Route 42",
+    "routeName": "Line 42 Eastbound",
+    "transportType": "Bus",
+    "driverName": "New Operator",
+    "driverId": "DRV-195",
+    "speed": 0,
+    "location": {
+      "lat": 6.9271,
+      "lng": 79.8612
+    },
+    "occupancyCurrent": 0,
+    "occupancyMax": 50,
+    "status": "Active",
+    "lastUpdated": "2026-10-12T00:11:12.675Z"
+  },
+  {
+    "vehicleId": "TN-0821",
+    "routeId": "Route 42",
+    "routeName": "Line 42 Eastbound (Central to University)",
+    "transportType": "Bus",
+    "driverName": "Saran Diya",
+    "driverId": "DRV-401",
+    "speed": 42,
+    "location": {
+      "lat": 6.9271,
+      "lng": 79.8612
+    },
+    "occupancyCurrent": 36,
+    "occupancyMax": 50,
+    "status": "Active",
+    "healthScore": 94,
+    "nextInspection": "24 Oct 2026",
+    "lastUpdated": "2026-10-12T00:01:24.876Z"
+  },
+  {
+    "vehicleId": "TN-0824",
+    "routeId": "Route 42",
+    "routeName": "Line 42 Eastbound (Market St to Malabe)",
+    "transportType": "Bus",
+    "driverName": "Kavithushan B.",
+    "driverId": "DRV-102",
+    "speed": 18,
+    "location": {
+      "lat": 6.9147,
+      "lng": 79.8732
+    },
+    "occupancyCurrent": 48,
+    "occupancyMax": 50,
+    "status": "Delayed",
+    "healthScore": 82,
+    "nextInspection": "19 Oct 2026",
+    "lastUpdated": "2026-10-12T00:01:24.877Z"
+  },
+  {
+    "vehicleId": "TN-0830",
+    "routeId": "Route 18",
+    "routeName": "Route 18 Express Train",
+    "transportType": "Train",
+    "driverName": "Anura Bandara",
+    "driverId": "DRV-809",
+    "speed": 65,
+    "location": {
+      "lat": 6.9344,
+      "lng": 79.85
+    },
+    "occupancyCurrent": 120,
+    "occupancyMax": 200,
+    "status": "Active",
+    "healthScore": 98,
+    "nextInspection": "28 Oct 2026",
+    "lastUpdated": "2026-10-12T00:01:24.877Z"
+  },
+  {
+    "vehicleId": "TN-0842",
+    "routeId": "Route 105",
+    "routeName": "Route 105 BRT Bus",
+    "transportType": "Bus",
+    "driverName": "Nimal Perera",
+    "driverId": "DRV-304",
+    "speed": 0,
+    "location": {
+      "lat": 6.9011,
+      "lng": 79.8655
+    },
+    "occupancyCurrent": 0,
+    "occupancyMax": 50,
+    "status": "Maintenance",
+    "healthScore": 64,
+    "nextInspection": "Immediate Inspection",
+    "lastUpdated": "2026-10-12T00:01:24.877Z"
+  },
+  {
+    "vehicleId": "TN-0855",
+    "routeId": "Route 42",
+    "routeName": "Line 42 Westbound",
+    "transportType": "Bus",
+    "driverName": "Kamal Silva",
+    "driverId": "DRV-220",
+    "speed": 38,
+    "location": {
+      "lat": 6.92,
+      "lng": 79.88
+    },
+    "occupancyCurrent": 24,
+    "occupancyMax": 50,
+    "status": "Active",
+    "healthScore": 91,
+    "nextInspection": "22 Oct 2026",
+    "lastUpdated": "2026-10-12T00:01:24.877Z"
+  }
+]

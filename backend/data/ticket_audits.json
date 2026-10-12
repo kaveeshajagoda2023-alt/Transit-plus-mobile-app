@@ -1,0 +1,68 @@
+[
+  {
+    "ticketId": "#TK-9824-B01",
+    "passType": "Single Journey Pass",
+    "routeId": "Route 42",
+    "fare": 65,
+    "passengerName": "Elena Rosiera",
+    "scannedAt": "2026-10-11T23:56:24.877Z",
+    "conductorId": "CND-77492",
+    "status": "valid",
+    "anomalyReason": ""
+  },
+  {
+    "ticketId": "#TK-9827-C18",
+    "passType": "Metro Rapid Monthly Pass",
+    "routeId": "Route 18",
+    "fare": 680,
+    "passengerName": "Kasun Wickrama",
+    "scannedAt": "2026-10-11T23:51:24.877Z",
+    "conductorId": "CND-88201",
+    "status": "valid",
+    "anomalyReason": ""
+  },
+  {
+    "ticketId": "#TK-9830-D42",
+    "passType": "Single Journey Pass",
+    "routeId": "Route 42",
+    "fare": 65,
+    "passengerName": "Unknown Commuter",
+    "scannedAt": "2026-10-11T23:46:24.877Z",
+    "conductorId": "CND-77492",
+    "status": "flagged",
+    "anomalyReason": "Outdoor QR Glare / Low Contrast Scan Retry (UI-01)"
+  },
+  {
+    "ticketId": "#TK-9833-A05",
+    "passType": "Day Pass (All Routes)",
+    "routeId": "Route 105",
+    "fare": 250,
+    "passengerName": "Dinuka Fernando",
+    "scannedAt": "2026-10-11T23:41:24.877Z",
+    "conductorId": "CND-30112",
+    "status": "invalid",
+    "anomalyReason": "Expired Pass Timestamp (Expired 12 mins prior)"
+  },
+  {
+    "ticketId": "#TK-9838-B12",
+    "passType": "Single Journey Pass",
+    "routeId": "Route 42",
+    "fare": 65,
+    "passengerName": "Unknown Commuter",
+    "scannedAt": "2026-10-11T23:31:24.877Z",
+    "conductorId": "CND-77492",
+    "status": "flagged",
+    "anomalyReason": "Duplicate Scan Verification Attempt"
+  },
+  {
+    "ticketId": "#TK-9842-C09",
+    "passType": "Student Transit Pass",
+    "routeId": "Route 18",
+    "fare": 40,
+    "passengerName": "Saman Kumara",
+    "scannedAt": "2026-10-11T23:21:24.877Z",
+    "conductorId": "CND-88201",
+    "status": "valid",
+    "anomalyReason": ""
+  }
+]
