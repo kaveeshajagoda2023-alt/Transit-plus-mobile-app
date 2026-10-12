@@ -1,5 +1,18 @@
 [
   {
+    "alertId": "ALT-3589",
+    "incidentType": "Road Obstruction & Maintenance",
+    "affectedRoute": "Route 18 Main Line",
+    "affectedTransportType": "Bus & Train",
+    "severity": "High",
+    "delayMinutes": 15,
+    "rerouteInstruction": "Reroute via Station Road Bypass. Expect delays.",
+    "broadcastedAt": "2026-10-12T04:11:14.921Z",
+    "broadcastBy": "Admin (IT23762572)",
+    "status": "Active",
+    "lastUpdated": "2026-10-12T04:11:36.927Z"
+  },
+  {
     "alertId": "ALT-5989",
     "incidentType": "Road Obstruction & Maintenance",
     "affectedRoute": "Route 42 Eastbound",

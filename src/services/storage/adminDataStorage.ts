@@ -2,6 +2,7 @@ import { getRuntimePlatform } from '../utils/platform';
 
 const VEHICLES_STORAGE_KEY = 'transitpulse_admin_fleet_vehicles';
 const ALERTS_STORAGE_KEY = 'transitpulse_admin_disruption_alerts';
+const AUDITS_STORAGE_KEY = 'transitpulse_admin_ticket_audits';
 
 const memoryStore = new Map<string, string>();
 
@@ -89,6 +90,25 @@ export const adminDataStorage = {
   async saveAlerts(alerts: any[]): Promise<void> {
     try {
       await setStoredItem(ALERTS_STORAGE_KEY, JSON.stringify(alerts));
+    } catch {}
+  },
+
+  async getTicketAudits<T>(defaultAudits: T): Promise<T> {
+    try {
+      const raw = await getStoredItem(AUDITS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as T;
+        }
+      }
+    } catch {}
+    return defaultAudits;
+  },
+
+  async saveTicketAudits(audits: any[]): Promise<void> {
+    try {
+      await setStoredItem(AUDITS_STORAGE_KEY, JSON.stringify(audits));
     } catch {}
   },
 };

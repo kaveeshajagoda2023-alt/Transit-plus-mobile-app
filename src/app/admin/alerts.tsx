@@ -348,7 +348,7 @@ export default function DisruptionAlertScreen() {
       {/* Top Bar */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerSubtitle}>CRUD 2 — Disruption Operations</Text>
+          <Text style={styles.headerSubtitle}>Service Disruption & Incident Dispatch</Text>
           <Text style={styles.headerTitle}>Disruption Alert Hub</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

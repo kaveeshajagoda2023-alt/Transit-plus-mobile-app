@@ -461,7 +461,7 @@ export default function VehicleManagementScreen() {
       {/* Top Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerSubtitle}>Member 4 — Fleet Operations</Text>
+          <Text style={styles.headerSubtitle}>Transit Fleet Operations & Inventory</Text>
           <Text style={styles.headerTitle}>Vehicle Management</Text>
         </View>
         <TouchableOpacity

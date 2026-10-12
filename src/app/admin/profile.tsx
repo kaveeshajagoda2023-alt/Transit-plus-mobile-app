@@ -165,7 +165,7 @@ export default function AdminProfileScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalSub}>Member 4 • Reporting Tool</Text>
+                <Text style={styles.modalSub}>Operations Telemetry & Audit Logs</Text>
                 <Text style={styles.modalTitle}>Export Audit Telemetry</Text>
               </View>
               <TouchableOpacity onPress={() => setShowExportModal(false)} style={styles.closeBtn}>
@@ -225,8 +225,8 @@ export default function AdminProfileScreen() {
 
             <View style={styles.exportMetaBox}>
               <Text style={styles.exportMetaTitle}>Included Telemetry Streams:</Text>
-              <Text style={styles.exportMetaItem}>• Active Fleet Inventory & Maintenance Logs (CRUD 1)</Text>
-              <Text style={styles.exportMetaItem}>• Disruption Alerts & Broadcast Events (CRUD 2)</Text>
+              <Text style={styles.exportMetaItem}>• Active Fleet Inventory & Maintenance Logs</Text>
+              <Text style={styles.exportMetaItem}>• Disruption Alerts & Broadcast Events</Text>
               <Text style={styles.exportMetaItem}>• Conductor Ticket Scans & Flagged Anomalies</Text>
             </View>
 

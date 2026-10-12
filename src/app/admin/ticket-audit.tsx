@@ -114,7 +114,7 @@ export default function TicketAuditScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerSubtitle}>US09 — Ticket Financial Audit</Text>
+          <Text style={styles.headerSubtitle}>Fare Verification & Anomaly Control</Text>
           <Text style={styles.headerTitle}>Ticket Audit Hub</Text>
         </View>
         <TouchableOpacity

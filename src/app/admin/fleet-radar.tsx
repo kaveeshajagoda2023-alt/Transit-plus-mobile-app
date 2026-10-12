@@ -26,7 +26,7 @@ export default function FleetRadarScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerSubtitle}>US08 — Fleet Monitoring</Text>
+          <Text style={styles.headerSubtitle}>Real-Time Spatial Telemetry Tracking</Text>
           <Text style={styles.headerTitle}>Live Fleet Radar</Text>
         </View>
         <View style={styles.activeBadge}>

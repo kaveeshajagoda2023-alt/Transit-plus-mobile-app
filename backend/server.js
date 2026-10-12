@@ -120,19 +120,112 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 2. Operational Metrics API
+  // 2. Operational Metrics API (Dynamically Computed from Real Datastore)
   if (pathname === '/api/admin/metrics' && req.method === 'GET') {
+    const totalVehicles = vehicles.length;
+    const activeVehicles = vehicles.filter(v => v.status === 'Active').length;
+    const delayedVehicles = vehicles.filter(v => v.status === 'Delayed').length;
+    const maintenanceVehicles = vehicles.filter(v => v.status === 'Maintenance').length;
+    const uniqueRoutes = Array.from(new Set(vehicles.map(v => v.routeId).filter(Boolean))).length || 4;
+    const flaggedAnomalies = ticketAudits.filter(t => t.status === 'flagged').length;
+    const activeDisruptions = disruptionAlerts.filter(a => a.status === 'Active').length;
+    const totalFareCollected = ticketAudits.reduce((sum, t) => sum + (Number(t.fare) || 0), 0);
+    const onTimePerformance = totalVehicles > 0 
+      ? Math.round(((totalVehicles - delayedVehicles) / totalVehicles) * 100) 
+      : 94;
+
+    // Dynamically compile real-time operations log stream
+    const logs = [];
+
+    // 1. Add vehicles that are Delayed
+    vehicles.filter(v => v.status === 'Delayed').forEach(v => {
+      logs.push({
+        id: `log-v-${v.vehicleId}`,
+        title: `#${v.vehicleId}`,
+        subtitle: `• ${v.routeName || v.routeId}`,
+        tag: `Delayed (${v.speed || 15}km/h)`,
+        tagColor: '#B45309',
+        tagBg: '#FEF3C7',
+        borderColor: '#FDE68A',
+        timestamp: 'Live'
+      });
+    });
+
+    // 2. Add vehicles in Maintenance
+    vehicles.filter(v => v.status === 'Maintenance').forEach(v => {
+      logs.push({
+        id: `log-m-${v.vehicleId}`,
+        title: `#${v.vehicleId}`,
+        subtitle: `• Depot Inspection`,
+        tag: 'Maintenance',
+        tagColor: '#DC2626',
+        tagBg: '#FEE2E2',
+        borderColor: '#FECDD3',
+        timestamp: 'Live'
+      });
+    });
+
+    // 3. Add active disruption alerts
+    disruptionAlerts.filter(a => a.status === 'Active').slice(0, 2).forEach(a => {
+      logs.push({
+        id: `log-a-${a.alertId}`,
+        title: `#${a.alertId}`,
+        subtitle: `• ${a.affectedRoute}`,
+        tag: a.source === 'Driver' ? 'Driver Alert' : `${a.severity} Alert`,
+        tagColor: a.severity === 'Critical' ? '#DC2626' : '#B45309',
+        tagBg: a.severity === 'Critical' ? '#FEE2E2' : '#FEF3C7',
+        borderColor: a.severity === 'Critical' ? '#FECDD3' : '#FDE68A',
+        timestamp: a.broadcastAt || 'Live'
+      });
+    });
+
+    // 4. Add flagged ticket anomalies
+    ticketAudits.filter(t => t.status === 'flagged').slice(0, 2).forEach(t => {
+      logs.push({
+        id: `log-t-${t.ticketId}`,
+        title: `${t.ticketId}`,
+        subtitle: `• Conductor ${t.conductorId || 'Scanner'} (${t.anomalyReason || 'Anomaly'})`,
+        tag: 'Flagged Anomaly',
+        tagColor: '#DC2626',
+        tagBg: '#FEE2E2',
+        borderColor: '#FECDD3',
+        timestamp: 'Live'
+      });
+    });
+
+    // 5. Add active on-time vehicles if stream has room
+    if (logs.length < 3) {
+      vehicles.filter(v => v.status === 'Active').slice(0, 3 - logs.length).forEach(v => {
+        logs.push({
+          id: `log-ok-${v.vehicleId}`,
+          title: `#${v.vehicleId}`,
+          subtitle: `• ${v.routeName || v.routeId}`,
+          tag: `On Time (${v.speed || 40}km/h)`,
+          tagColor: '#15803D',
+          tagBg: '#DCFCE7',
+          borderColor: '#A7F3D0',
+          timestamp: 'Live'
+        });
+      });
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
       metrics: {
-        activeFleetCount: 142,
-        activeRoutesCount: 24,
-        passesIssuedCount: 18420,
-        flaggedAnomaliesCount: 23,
-        onTimePerformancePercentage: 94.2,
+        activeFleetCount: activeVehicles,
+        totalFleetCount: totalVehicles,
+        delayedFleetCount: delayedVehicles,
+        maintenanceFleetCount: maintenanceVehicles,
+        activeRoutesCount: uniqueRoutes,
+        passesIssuedCount: ticketAudits.length,
+        totalFareCollectedLKR: totalFareCollected,
+        flaggedAnomaliesCount: flaggedAnomalies,
+        activeDisruptionsCount: activeDisruptions,
+        onTimePerformancePercentage: onTimePerformance,
         dbStatus: 'MongoDB Datastore Sync Active'
-      }
+      },
+      logs: logs.slice(0, 6)
     }));
     return;
   }
@@ -414,7 +507,7 @@ server.listen(PORT, () => {
   console.log(`
 ========================================================================
 🚀 TRANSITPLUS PURE NODE.JS SERVER RUNNING ON PORT ${PORT}
-📌 MEMBER 4 API SCOPE: Admin & Fleet Operations
+📌 SCOPE: Transit Operations Control & Fleet Administration
 🔗 REST Endpoints: http://localhost:${PORT}/api/admin/metrics
 ========================================================================
   `);

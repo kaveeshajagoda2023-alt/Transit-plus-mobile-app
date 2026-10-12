@@ -125,8 +125,8 @@ export function buildAuditPdfBinary(options: { coordinatorName: string; range: s
     drawText('F2', 12, x + 10, 572, kpi.val, kpi.r, kpi.g, kpi.b);
   });
 
-  // Table 1: Fleet Inventory (CRUD 1)
-  drawText('F2', 12, 40, 530, '1. FLEET TELEMETRY & ASSET STATUS (CRUD 1)');
+  // Table 1: Fleet Inventory
+  drawText('F2', 12, 40, 530, '1. FLEET TELEMETRY & ASSET STATUS');
   drawLine(40, 522, 572, 522, 15, 41, 66, 1.5);
 
   setFillColor(241, 245, 249);
@@ -154,8 +154,8 @@ export function buildAuditPdfBinary(options: { coordinatorName: string; range: s
     drawText('F2', 8, 510, y, row.health);
   });
 
-  // Table 2: Active Disruption Broadcasts (CRUD 2)
-  drawText('F2', 12, 40, 345, '2. SYSTEM DISRUPTION ADVISORIES & ALERTS (CRUD 2)');
+  // Table 2: Active Disruption Broadcasts
+  drawText('F2', 12, 40, 345, '2. SYSTEM DISRUPTION ADVISORIES & ALERTS');
   drawLine(40, 337, 572, 337, 15, 41, 66, 1.5);
 
   setFillColor(241, 245, 249);
@@ -396,7 +396,7 @@ export function buildAuditHtml(options: { coordinatorName: string; range: string
     </div>
   </div>
 
-  <h2>1. Active Fleet Telemetry & Inspection Health (CRUD 1)</h2>
+  <h2>1. Active Fleet Telemetry & Inspection Health</h2>
   <table>
     <thead>
       <tr>
@@ -422,7 +422,7 @@ export function buildAuditHtml(options: { coordinatorName: string; range: string
     </tbody>
   </table>
 
-  <h2>2. System Disruption Advisories & Broadcast Events (CRUD 2)</h2>
+  <h2>2. System Disruption Advisories & Broadcast Events</h2>
   <table>
     <thead>
       <tr>
@@ -487,11 +487,11 @@ export function buildAuditCsv(options: { range: string; dateStr: string }): stri
     `# Range: ${options.range} | Generated: ${options.dateStr}`,
     `# Clearance: Tier 3 Master | Coordinator: K. K. Jagoda`,
     ``,
-    `[SECTION 1: FLEET INVENTORY TELEMETRY (CRUD 1)]`,
+    `[SECTION 1: FLEET INVENTORY TELEMETRY]`,
     `Unit ID,Transport Mode,Assigned Route,Driver,Capacity Load,Status,Health Rating`,
     ...FLEET_SNAPSHOT.map(f => `${f.id},${f.id.startsWith('TB') ? 'Bus' : 'Train'},"${f.route}","${f.driver}","${f.load}",${f.status},${f.health}`),
     ``,
-    `[SECTION 2: DISRUPTION ADVISORIES (CRUD 2)]`,
+    `[SECTION 2: DISRUPTION ADVISORIES]`,
     `Alert ID,Severity,Route,Advisory Message,Status`,
     ...ALERTS_SNAPSHOT.map(a => `${a.code},${a.severity},"${a.route}","${a.message}",${a.status}`),
     ``,

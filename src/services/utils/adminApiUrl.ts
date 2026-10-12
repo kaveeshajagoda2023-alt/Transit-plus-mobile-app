@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 /**
- * Resolves the backend API URL dynamically for Member 4 Admin functions.
+ * Resolves the backend API URL dynamically for Transit Operations & Admin functions.
  * - Web: http://localhost:5000
  * - Android physical device over LAN (Expo Go): http://<hostIp>:5000
  * - Android Emulator: http://10.0.2.2:5000
